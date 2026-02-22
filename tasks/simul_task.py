@@ -35,18 +35,18 @@ class SimulationTask(DivisibleTask):
                 self.matrix_size = 500
             
             if iterations is not None: 
-                self.iterations = iterations #meaning if the user provided a value for iterations, use it. Otherwise, default to 10
+                self.round_matrix = iterations #meaning if the user provided a value for iterations, use it. Otherwise, default to 10
             else:
-                self.iterations = 10
+                self.round_matrix = 10
 
         elif simulation_type == 'monte_carlo':
             if num_samples is not None:
-                self.num_samples = num_samples #meaning if the user provided a value for num_samples, use it. Otherwise, default to 10 million
+                self.arrows_thrown = num_samples #meaning if the user provided a value for num_samples, use it. Otherwise, default to 10 million
             else:
-                self.num_samples = 10_000_000
+                self.arrows_thrown = 10_000_000
 
     #prime number generation task
-    def _is_prime(self, n: int) -> bool:
+    def is_prime(self, n: int) -> bool:
         """
         find all the prime numbers in the range [2, n).
         """
@@ -63,7 +63,53 @@ class SimulationTask(DivisibleTask):
         """
         prime_numbers = []
         for n in range(start, end):
-            if self._is_prime(n):
+            if self.is_prime(n):
                 prime_numbers.append(n)
         return prime_numbers
 
+    #matrix simulation task
+    def matrix_simulation(self, size: int, round_matrix: int) -> float:
+        matrix = np.random.rand(size, size) 
+        for _ in range(round_matrix):
+            matrix = np.dot(matrix, matrix)
+            matrix = matrix / np.max(matrix)
+        return float(np.sum(matrix))
+
+    #monte carlo simulation task
+    def monte_carlo_pi(self, arrows_thrown: int) -> float:
+        x = np.random.uniform(-1, 1, arrows_thrown)
+        y = np.random.uniform(-1, 1, arrows_thrown)
+        arrows_inside = int(np.sum((x ** 2 + y ** 2) <= 1))
+        return (arrows_inside / arrows_thrown)* 4
+
+    def execute(self) -> dict:
+        self.status = "RUNNING"
+
+        if self.simulation_type == 'primes':
+            primes = self.find_primes(self.start_range, self.end_range)
+            result = {
+                'type': 'primes',
+                'primes': primes,
+                'count': len(primes),
+                'range': (self.start_range, self.end_range)
+            }
+
+        elif self.simulation_type == 'matrix':
+            sum_result = self.matrix_simulation(self.matrix_size, self.round_matrix)
+            result = {
+                'type': 'matrix',
+                'sum': sum_result,
+                'matrix_size': self.matrix_size,
+                'rounds': self.round_matrix
+            }
+
+        elif self.simulation_type == 'monte_carlo':
+            pi_estimate = self.monte_carlo_pi(self.arrows_thrown)
+            result = {
+                'type': 'monte_carlo',
+                'pi_estimate': pi_estimate,
+                'arrows_thrown': self.arrows_thrown
+            }
+
+        self.status = "DONE"
+        return result

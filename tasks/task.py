@@ -15,7 +15,7 @@ class Task(ABC):
     """
 
     def __init__(self, task_difficulty : float):
-        self.task_id = str(uuid.uuid4()) #random id 128bit
+        self.task_id = str(uuid.uuid4()) #random id ,128bit 
         self.task_difficulty = task_difficulty #difficulty of the task, higher=harder
         self.status = "CREATED" #status of the task: CREATED, RUNNING, DONE, FAILD
 

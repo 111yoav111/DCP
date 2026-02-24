@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from .task import Task
+from task import Task
 
 
 class DivisibleTask(Task, ABC):
@@ -7,32 +7,27 @@ class DivisibleTask(Task, ABC):
     Abstract base class for tasks that can be divided into subtasks.
     """
 
-    def __init__(self, task_difficulty : float):
+    def __init__(self, task_difficulty: float):
         super().__init__(task_difficulty)
-        self.is_subtask = False #flag to indicate if its subtask
-        self.parent_task_id = None #refer to parent task id, if its subtask ofc
+        self.is_subtask = False
+        self.parent_task_id = None
+        self.subtask_index = None
 
     @abstractmethod
-    def split_into_subtasks(self, num_workers: int): #TD- understand what its returning
-        pass 
+    def split_into_subtasks(self, worker_loads):
+        pass
 
     @abstractmethod
     def merge_results(self, subtask_results: list[dict]) -> dict:
         """
         merge results from the subtask into a single result.
-
-        subtask_results is a list of a dict which contain the id: result of the tasks
-
-        it will return a dict with the merged final result
-
-        **this method is most likely to be called by the master computer after collecting all subtask results
         """
+        pass
 
-    def mention_subtask(self, parent_id : str, subtask_index : int):
+    def _mark_as_subtask(self, parent_id: str, subtask_index):
         """
-        method for marking a taks as a subtask, thats the only use of this method.
+        method for marking a task as a subtask.
         """
         self.is_subtask = True
-        self.parent_id = parent_id #ID of parent task
-        self.subtask_index = subtask_index #index of this task in the parent subtask list.
-
+        self.parent_task_id = parent_id
+        self.subtask_index = subtask_index

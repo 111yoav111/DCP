@@ -25,8 +25,8 @@ class RenderTask(DivisibleTask):
 
     def _default_scene(self) -> list[dict]:
         return [
-            {'position': np.array([0.,  0., -5.]), 'radius': 1.0, 'color': np.array([255.,   0.,   0.])},
-            {'position': np.array([2.,  1., -6.]), 'radius': 0.8, 'color': np.array([  0., 200., 255.])},
+            {'position': np.array([0.,  0., -5.]), 'radius': 1.0, 'color': np.array([75.,   0.,   0.])},
+            {'position': np.array([2.,  1., -6.]), 'radius': 0.8, 'color': np.array([  0., 45., 73.])},
             {'position': np.array([-2., -1., -4.]), 'radius': 0.6, 'color': np.array([100., 255., 100.])},
         ]
 

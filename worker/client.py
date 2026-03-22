@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import psutil
 
 logging.basicConfig(
     level=logging.INFO,
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 BUFFER_SIZE = 4096
 RECONNECT_DELAY = 5  # seconds before retrying a lost connection
+CPU_UPDATE_INTERVAL = 4  # seconds between CPU usage updates
 
 
 class WorkerClient:
@@ -60,6 +62,19 @@ class WorkerClient:
             self._writer = None
             self._reader = None
 
+    async def _cpu_heartbeat_loop(self) -> None:
+        """
+        Send CPU% as float string every CPU_UPDATE_INTERVAL seconds.
+        """
+        psutil.cpu_percent(interval=None)
+        await asyncio.sleep(0.1) 
+
+        while True:
+            cpu = psutil.cpu_percent(interval=None)
+            await self._send(str(cpu))
+            logger.info(f"[{self.worker_id}] CPU heartbeat sent — CPU: {cpu:.2f}%")
+            await asyncio.sleep(CPU_UPDATE_INTERVAL)
+
     async def _session(self) -> None:
         """
         Keep connection alive and log anything master sends.
@@ -78,7 +93,14 @@ class WorkerClient:
         while True:
             try:
                 await self._connect()
-                await self._session()
+
+                tasks = [asyncio.create_task(self._session()), asyncio.create_task(self._cpu_heartbeat_loop())]
+
+                finished_tasks, unfinished_tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED,)
+
+                for task in unfinished_tasks:
+                    task.cancel()
+
             except (ConnectionRefusedError, OSError) as e:
                 logger.error(
                     f"[{self.worker_id}] Could not connect: {e}. "

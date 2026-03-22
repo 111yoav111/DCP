@@ -9,19 +9,19 @@ logger = logging.getLogger(__name__)
 
 HOST = "0.0.0.0"
 PORT = 9000
-
+CPU_MAX_USAGE = 80.0 
 
 class WorkerConnection:
     """
     Represents a single connected worker.
     """
 
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, worker_id : str):
         self.reader = reader
         self.writer = writer
-        addr = writer.get_extra_info("peername")
-        self.address: tuple = addr
-        self.worker_id: str = f"{addr[0]}:{addr[1]}"
+        addr = writer.get_extra_info("peername") 
+        self.address: tuple = addr # ^^ both of these lines are not strictly necessary, but they may help for debugging.
+        self.worker_id: str = worker_id
 
     async def receive(self) -> str | None:
         try:
@@ -45,13 +45,19 @@ class MasterServer:
         self.host = host
         self.port = port
         self.workers: dict[str, WorkerConnection] = {}  # worker_id : connection
+        self.next_worker_id = 1 
+
+    def _assign_id(self) -> str:
+        worker_id = (f"worker-{self.next_worker_id}")
+        self.next_worker_id += 1
+        return worker_id
 
     async def _handle_worker(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
         Called automatically for every new worker that connects.
         Creates a WorkerConnection and starts a session loop for it.
         """
-        worker = WorkerConnection(reader, writer)
+        worker = WorkerConnection(reader, writer, self._assign_id())
         self.workers[worker.worker_id] = worker
         logger.info(f"Worker connected: {worker.worker_id} , total workers = {len(self.workers)}")
 
@@ -61,13 +67,22 @@ class MasterServer:
             self._disconnect(worker)
 
     async def _session(self, worker: WorkerConnection) -> None:
-        """Keep the connection alive and log anything the worker sends."""
+        """Keep the connection alive and handle CPU updates from the worker."""
         while True:
             message = await worker.receive()
             if message is None:
-                logger.info(f"Worker {worker.worker_id} disconnected.")
+                logger.info(f"{worker.worker_id} disconnected.")
                 break
-            logger.info(f"received from {worker.worker_id}: {message}")
+            try:
+                worker_cpu = float(message)
+            except ValueError:
+                logger.warning(f"[{worker.worker_id}] bad CPU value - not a number: {message}")
+                continue
+
+            if worker_cpu >= CPU_MAX_USAGE:
+                self._disconnect(worker)
+            else:
+                logger.info(f"{worker.worker_id} CPU: {worker_cpu} %")
 
     def _disconnect(self, worker: WorkerConnection) -> None:
         """Clean up after a worker disconnects."""

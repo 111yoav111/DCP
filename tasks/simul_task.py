@@ -1,6 +1,7 @@
 import numpy as np
-from divisible_task import DivisibleTask
-
+from tasks.divisible_task import DivisibleTask
+import pickle
+import zstandard as zstd
 
 class SimulationTask(DivisibleTask):
 
@@ -103,18 +104,106 @@ class SimulationTask(DivisibleTask):
             }
 
         self.status = "DONE"
+        self.result = result 
         return result
 
-#for now, just for testing 
-    def split_into_subtasks(self):
+
+    def split_into_subtasks(self, num_workers: int = 1) -> list['SimulationTask']:
+        """
+        split the task(self) into the num of worker equaly 
+
+        split strategy:
+        prime -> split the number range evenly across workers.
+        monte_carlo -> split the arrow count across workers.
+        matrix -> unfort, cant be split cuz each round depends on previous.
+
+        return [self] which is the list of the subtasks
+        """
+        if num_workers <= 1:
+            return [self]
+
+        if self.simulation_type == 'primes':
+            return self._split_primes(num_workers)
+
+        if self.simulation_type == 'monte_carlo':
+            return self._split_monte_carlo(num_workers)
+
+        # matrix: not splittable, run on a single worker as-is
         return [self]
 
-    def merge_results(self, results):
-        return results[0]
+    def _split_primes(self, num_workers: int) -> list['SimulationTask']:
+        total = self.primes_end_range - self.start_range
+        chunk = total // num_workers
+        subtasks = []
 
-    def to_bytes(self):
-        return b""
+        for i in range(num_workers):
+            s = self.start_range + i * chunk
+            e = s + chunk if i < num_workers - 1 else self.primes_end_range #for the last worker just set the range to end of total.
+
+            st = SimulationTask(
+                simulation_type = 'primes',
+                difficulty = self.task_difficulty / num_workers,
+                start_range = s,
+                end_range = e,
+            )
+            st._mark_as_subtask(self.task_id, i)
+            subtasks.append(st)
+
+        return subtasks
+
+    def _split_monte_carlo(self, num_workers: int) -> list['SimulationTask']:
+        base_arrows = self.arrows_thrown // num_workers
+        subtasks = []
+
+        for i in range(num_workers):
+            remaining_arrows = self.arrows_thrown - (i * base_arrows) 
+            arrows = min(base_arrows, remaining_arrows) if i < num_workers - 1 else remaining_arrows #if its last he get what left
+
+            st = SimulationTask(
+                simulation_type = 'monte_carlo',
+                difficulty = self.task_difficulty / num_workers,
+                num_samples = arrows,
+            )
+            st._mark_as_subtask(self.task_id, i)
+            subtasks.append(st)
+
+        return subtasks
+
+    def merge_results(self, subtask_results: list[dict]) -> dict:
+        if not subtask_results:
+            raise ValueError("ERROR - merge_results: got empty list")
+
+        sim_type = subtask_results[0]['type']
+
+        if sim_type == 'primes':
+            all_primes = []
+            for r in subtask_results:
+                all_primes.extend(r['primes'])
+            all_primes.sort()
+            return {
+                'type': 'primes',
+                'primes': all_primes,
+                'count': len(all_primes),
+                'range': (self.start_range, self.primes_end_range),
+            }
+
+        if sim_type == 'monte_carlo':
+            total_arrows = sum(r['arrows_thrown'] for r in subtask_results)
+            weighted_pi = sum(
+                r['pi_estimate'] * r['arrows_thrown'] for r in subtask_results
+            ) / total_arrows
+            return {
+                'type': 'monte_carlo',
+                'pi_estimate': weighted_pi,
+                'arrows_thrown': total_arrows,
+            }
+
+        
+        return subtask_results[0] #for matrix since its not splitable...
+
+    def to_bytes(self) -> bytes:
+        return zstd.ZstdCompressor(level=3).compress(pickle.dumps(self))
 
     @classmethod
-    def from_bytes(cls, b):
-        return cls()
+    def from_bytes(cls, data: bytes) -> 'SimulationTask':
+        return pickle.loads(zstd.ZstdDecompressor().decompress(data))

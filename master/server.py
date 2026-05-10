@@ -1,6 +1,9 @@
 import asyncio
 import logging
 
+from loadbalancer.load_balancer import *
+from loadbalancer.task_pool import task_pool_loop
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(levelname)s - %(message)s"
@@ -45,7 +48,8 @@ class MasterServer:
         self.host = host
         self.port = port
         self.workers: dict[str, WorkerConnection] = {}  # worker_id : connection
-        self.next_worker_id = 1 
+        self.next_worker_id = 1
+        self.lb = LoadBalancer() #lb instance - have task queue + workermatching ability
 
     def _assign_id(self) -> str:
         worker_id = (f"worker-{self.next_worker_id}")
@@ -60,6 +64,8 @@ class MasterServer:
         worker = WorkerConnection(reader, writer, self._assign_id())
         self.workers[worker.worker_id] = worker
         logger.info(f"Worker connected: {worker.worker_id} , total workers = {len(self.workers)}")
+        host, port  = worker.address
+        await self.lb.register_worker(worker.worker_id, host, port) #register with lb so it know worker exists
 
         try:
             await self._session(worker)
@@ -83,14 +89,37 @@ class MasterServer:
                 self._disconnect(worker)
             else:
                 logger.info(f"{worker.worker_id} CPU: {worker_cpu} %")
+                await self.lb.update_worker_stats(worker.worker_id, worker_cpu)
+
 
     def _disconnect(self, worker: WorkerConnection) -> None:
-        """Clean up after a worker disconnects."""
+        """
+        Clean up after a worker disconnects.
+        """
         self.workers.pop(worker.worker_id, None)
         worker.close()
         logger.info(f"Worker removed: {worker.worker_id} , total workers = {len(self.workers)}")
 
+    async def _force_disconnect(self, worker_id : str) -> None:
+        """
+        called by LB kick_worker - close the TCP connection
+        """
+        worker = self.workers.get(worker_id)
+        if worker:
+            self._disconnect(worker)
+
     async def start(self) -> None:
+        self.lb.set_kick_callback(self._force_disconnect) #register the kick so LB can close TCP connection.
+
+        # ── stub send callback (iteration 5 placeholder) ──────────────────────
+        # real packet sending is built in iteration 6.
+        # for now just log the dispatch and pretend it was sent successfully.
+        async def _stub_send(worker_id: str, task) -> bool:
+            logger.info(f"[STUB] would send task {task.task_id[:8]}... to {worker_id} (real send in iteration 6)")
+            return True   # True = success, stops the infinite requeue loop
+
+        self.lb.set_send_callback(_stub_send)
+
         server = await asyncio.start_server(
             self._handle_worker, self.host, self.port
         )
@@ -98,4 +127,10 @@ class MasterServer:
         logger.info(f"Master listening on {addr[0]}:{addr[1]}")
 
         async with server:
-            await server.serve_forever()
+            #run TCP server, LB, and task pool all together
+            await asyncio.gather(
+                server.serve_forever(),
+                self.lb.start(),
+                task_pool_loop(self.lb)
+            )
+            

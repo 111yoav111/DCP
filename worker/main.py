@@ -1,7 +1,6 @@
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) #solve all the import issue I had, shoutout github :)
-
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # shoutout github :)
 
 import asyncio
 import threading
@@ -13,20 +12,19 @@ def main() -> None:
     ui = WorkerUI()
 
     def on_connect(ip: str, port: int):
-        # pass ui so the client can push task/connection updates to the UI
-        client = WorkerClient(host=ip, port=port)
-
+        client = WorkerClient(host=ip, port=port, ui=ui)
+        #run the client on second thread
         def run_backend():
             asyncio.run(client.run())
 
         backend_thread = threading.Thread(target=run_backend, daemon=True)
         backend_thread.start()
 
-        ui.on_connection_change("Connecting...", color="orange")
+        ui.on_connection_change("Connecting...", color="turquoise")
 
     ui.set_connect_callback(on_connect)
 
-    # UI runs on main thread — blocks until window is closed
+    # UI runs on main thread 
     ui.run()
 
 

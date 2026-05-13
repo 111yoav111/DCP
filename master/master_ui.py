@@ -6,7 +6,7 @@ from PIL import Image, ImageTk
 
 from loadbalancer.load_balancer import LoadBalancer, WorkerState, LBMetrics, TaskRecord
 
-APP_TITLE  = "AtlasCore"
+APP_TITLE  = "DCP - Dynamic Compute Power"
 WIN_WIDTH  = 1080
 WIN_HEIGHT = 700
 
@@ -37,7 +37,7 @@ class LoginFrame(tk.Frame):
         self.build()
 
     def load_logo(self, width=200, height=140):
-        path = os.path.join(ASSETS_DIR, "logo_cyan.png")
+        path = os.path.join(ASSETS_DIR, "logo.png")
         if not os.path.exists(path):
             return None
         img = Image.open(path).resize((width, height))
@@ -45,7 +45,7 @@ class LoginFrame(tk.Frame):
         return self.logo_image
 
     def build(self):
-        bg = os.path.join(ASSETS_DIR, "login_background2.png")
+        bg = os.path.join(ASSETS_DIR, "master_background.png")
         if os.path.exists(bg):
             img = Image.open(bg).resize((WIN_WIDTH, WIN_HEIGHT))
             self.bg_image = ImageTk.PhotoImage(img)
@@ -108,7 +108,7 @@ class ControlPanel(tk.Frame):
         self.build()
 
     def load_logo(self, width=200, height=140):
-        path = os.path.join(ASSETS_DIR, "logo_cyan.png")
+        path = os.path.join(ASSETS_DIR, "logo.png")
         if not os.path.exists(path):
             return None
         img = Image.open(path).resize((width, height))

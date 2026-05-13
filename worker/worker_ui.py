@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 
-APP_TITLE   = "AtlasCore"
+APP_TITLE   = "DCP - Dynamic Compute Power"
 WIN_WIDTH   = 1080
 WIN_HEIGHT  = 700
 
@@ -33,7 +33,7 @@ class LoginFrame(tk.Frame):
         self.build()
 
     def load_logo(self, width=140, height=140):
-        logo_path = os.path.join(ASSETS_DIR, "logo.png")
+        logo_path = os.path.join(ASSETS_DIR, "logo1.png")
         if not os.path.exists(logo_path):
             print(f"Logo not found at {logo_path}")
             return None
@@ -42,7 +42,7 @@ class LoginFrame(tk.Frame):
         return self.logo_image
 
     def build(self):
-        bg_path = os.path.join(ASSETS_DIR, "login_background.png")
+        bg_path = os.path.join(ASSETS_DIR, "worker_background.png")
         if os.path.exists(bg_path):
             img = Image.open(bg_path).resize((WIN_WIDTH, WIN_HEIGHT))
             self.bg_image = ImageTk.PhotoImage(img)
@@ -109,8 +109,8 @@ class ComputePanel(tk.Frame):
         self.logo_image = None
         self.build()
 
-    def load_logo(self, width=50, height=50):
-        logo_path = os.path.join(ASSETS_DIR, "logo.png")
+    def load_logo(self, width=200, height=140):
+        logo_path = os.path.join(ASSETS_DIR, "logo1.png")
         if not os.path.exists(logo_path):
             return None
         img = Image.open(logo_path).resize((width, height))

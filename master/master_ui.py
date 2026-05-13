@@ -36,8 +36,8 @@ class LoginFrame(tk.Frame):
         self.logo_image = None
         self.build()
 
-    def load_logo(self, width=180, height=140):
-        path = os.path.join(ASSETS_DIR, "logo.png")
+    def load_logo(self, width=200, height=140):
+        path = os.path.join(ASSETS_DIR, "logo_cyan.png")
         if not os.path.exists(path):
             return None
         img = Image.open(path).resize((width, height))
@@ -45,7 +45,7 @@ class LoginFrame(tk.Frame):
         return self.logo_image
 
     def build(self):
-        bg = os.path.join(ASSETS_DIR, "login_background1.jpg")
+        bg = os.path.join(ASSETS_DIR, "login_background2.png")
         if os.path.exists(bg):
             img = Image.open(bg).resize((WIN_WIDTH, WIN_HEIGHT))
             self.bg_image = ImageTk.PhotoImage(img)
@@ -60,21 +60,31 @@ class LoginFrame(tk.Frame):
         tk.Label(mf, text="Mode:", font=FONT_BODY).pack(side="left", padx=5)
         tk.Label(mf, text="Master", font=FONT_BODY, relief="sunken", width=12).pack(side="left")
 
-        self.ip = tk.StringVar(value="0.0.0.0")
+        vcmd_ip   = (self.register(lambda P: len(P) <= 15), "%P")
+        vcmd_port = (self.register(lambda P: len(P) <= 5),  "%P")
+
+        self.ip = tk.StringVar()
         ipf = tk.Frame(self); ipf.pack(pady=5)
         tk.Label(ipf, text="IP:", font=FONT_BODY, width=6).pack(side="left")
-        tk.Entry(ipf, textvariable=self.ip, width=18, font=FONT_BODY).pack(side="left")
+        tk.Entry(ipf, textvariable=self.ip, width=18, font=FONT_BODY,
+                 validate="key", validatecommand=vcmd_ip).pack(side="left")
 
         self.port = tk.StringVar(value="9000")
         pf = tk.Frame(self); pf.pack(pady=5)
         tk.Label(pf, text="PORT:", font=FONT_BODY, width=6).pack(side="left")
-        tk.Entry(pf, textvariable=self.port, width=18, font=FONT_BODY).pack(side="left")
+        tk.Entry(pf, textvariable=self.port, width=18, font=FONT_BODY,
+                 validate="key", validatecommand=vcmd_port).pack(side="left")
 
         tk.Button(self, text="Connect", font=FONT_HEADER, bg=BTN_CONNECT,
                   fg="white", width=14, command=self.connect).pack(pady=20)
 
     def connect(self):
-        ip, port = self.ip.get().strip(), self.port.get().strip()
+        ip = self.ip.get().strip()
+        port = self.port.get().strip()
+        
+        if len(ip) > 15 or len(port) > 5:
+            messagebox.showwarning("Input too long", "IP or PORT input is too long.")
+            return
         if not ip or not port:
             messagebox.showwarning("Missing info", "Please fill in IP and PORT.")
             return
@@ -97,8 +107,8 @@ class ControlPanel(tk.Frame):
         self.logo_image = None
         self.build()
 
-    def load_logo(self, width=120, height=70):
-        path = os.path.join(ASSETS_DIR, "logo.png")
+    def load_logo(self, width=200, height=140):
+        path = os.path.join(ASSETS_DIR, "logo_cyan.png")
         if not os.path.exists(path):
             return None
         img = Image.open(path).resize((width, height))

@@ -60,17 +60,22 @@ class LoginFrame(tk.Frame):
         tk.Label(mode_frame, text="Worker", font=FONT_BODY, relief="sunken", width=12).pack(side="left")
 
         # empty default — user must type the real master IP
+        vcmd_ip   = (self.register(lambda P: len(P) <= 15), "%P")
+        vcmd_port = (self.register(lambda P: len(P) <= 5),  "%P")
+
         self.ip = tk.StringVar(value="")
         ip_frame = tk.Frame(self)
         ip_frame.pack(pady=5)
         tk.Label(ip_frame, text="IP:", font=FONT_BODY, width=6).pack(side="left")
-        tk.Entry(ip_frame, textvariable=self.ip, width=18, font=FONT_BODY).pack(side="left")
+        tk.Entry(ip_frame, textvariable=self.ip, width=18, font=FONT_BODY,
+                 validate="key", validatecommand=vcmd_ip).pack(side="left")
 
         self.port = tk.StringVar(value="9000")
         port_frame = tk.Frame(self)
         port_frame.pack(pady=5)
         tk.Label(port_frame, text="PORT:", font=FONT_BODY, width=6).pack(side="left")
-        tk.Entry(port_frame, textvariable=self.port, width=18, font=FONT_BODY).pack(side="left")
+        tk.Entry(port_frame, textvariable=self.port, width=18, font=FONT_BODY,
+                 validate="key", validatecommand=vcmd_port).pack(side="left")
 
         tk.Button(self, text="Connect", font=FONT_HEADER, bg=BTN_CONNECT,
                   fg="white", width=14, command=self.connect).pack(pady=20)
@@ -78,6 +83,9 @@ class LoginFrame(tk.Frame):
     def connect(self):
         ip   = self.ip.get().strip()
         port = self.port.get().strip()
+        if len(ip) > 15 or len(port) > 5:
+            messagebox.showwarning("Input too long", "IP or PORT input is too long.")
+            return
         if not ip or not port:
             messagebox.showwarning("Missing info", "Please fill in IP and PORT.")
             return
@@ -247,3 +255,4 @@ class WorkerUI:
 
     def run(self):
         self.root.mainloop()
+        

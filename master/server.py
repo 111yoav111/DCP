@@ -13,6 +13,7 @@ from networking.packets import (
     ControlPacket, TaskPacket,
     PACKET_FLAGS, DISCONNECT_FLAGS,
 )
+from networking.encrypt_layer import SessionCrypto, generate_rsa_keypair
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,15 +29,8 @@ CPU_MAX_USAGE = 80.0
 class WorkerConnection:
     """
     Represents a single connected worker.
-
-    Iteration-6 additions vs the stub:
-      - worker_id_int  : integer assigned from next_worker_id counter,
-                         used inside ControlPacket headers on the wire.
-      - _lock          : asyncio.Lock so concurrent sends never interleave.
     """
-
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
-                 worker_id: str, worker_id_int: int):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, worker_id: str, worker_id_int: int, crypto: SessionCrypto):
         self.reader = reader
         self.writer = writer
         addr = writer.get_extra_info("peername")
@@ -44,6 +38,7 @@ class WorkerConnection:
         self.worker_id: str = worker_id
         self.worker_id_int: int = worker_id_int
         self._lock = asyncio.Lock()
+        self.crypto: SessionCrypto = crypto  # AES session key for this worker
 
     def close(self) -> None:
         self.writer.close()
@@ -61,6 +56,8 @@ class MasterServer:
         self.next_worker_id = 1
         self.lb = LoadBalancer()
         self.payload_record: dict[str, str] = {} #mapping of payload uuid to TaskRecord uuid - the LB own key.
+        self.rsa_private_key = generate_rsa_keypair()  # one RSA key pair for all connections (every master-worker), generated once at startup
+        logger.info("RSA key pair generated — ready for worker handshakes.")
 
 
     def _assign_id(self) -> tuple[str, int]:
@@ -74,13 +71,12 @@ class MasterServer:
         Returns True on success (LB marks worker BUSY).
         Returns False on failure (LB re-queues the task).
         """
-        conn = self.workers.get(worker_id)
-        if conn is None:
+        connection = self.workers.get(worker_id)
+        if connection is None:
             logger.warning("[lb_send] worker %s not found", worker_id)
             return False
         try:
-            await net_send_task(conn.writer, conn._lock,
-                                task.payload, priority=task.priority)
+            await net_send_task(connection.writer, connection._lock, task.payload, priority=task.priority, crypto=connection.crypto)
             # map payload uuid → TaskRecord uuid so result lookup works
             if hasattr(task.payload, "task_id"):
                 self.payload_record[task.payload.task_id] = task.task_id
@@ -97,26 +93,34 @@ class MasterServer:
         Sends ctrl_disconnect to the worker FIRST so it clears its tasks/UI,
         then closes the TCP connection on our side.
         """
-        conn = self.workers.get(worker_id)
-        if conn:
+        connection = self.workers.get(worker_id)
+        if connection:
             try:
-                await net_send_disconnect(conn.writer, conn._lock, conn.worker_id_int, DISCONNECT_FLAGS.unknown)
+                await net_send_disconnect(connection.writer, connection._lock, connection.worker_id_int, DISCONNECT_FLAGS.unknown, crypto=connection.crypto)
             except OSError:
                 pass  # already gone
-            self._disconnect(conn)
+            self._disconnect(connection)
 
     # --------per connection handler -------------------------------------------------------
 
     async def _handle_worker(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
         Called automatically for every new TCP connection.
-        Performs the HELLO/WELCOME handshake, registers with LB, runs read loop.
+        Performs the crypto handshake, then HELLO/WELCOME, registers with LB, runs read loop.
         """
         addr = writer.get_extra_info("peername")
 
-        # handshake: expect ctrl_hello from worker
+        # crypto handshake before anything else — establishes the shared AES key
         try:
-            pkt = await read_one_packet(reader)
+            crypto = await SessionCrypto.master_handshake(reader, writer, self.rsa_private_key)
+        except Exception as exc:
+            logger.warning("Crypto handshake failed from %s: %s", addr, exc)
+            writer.close()
+            return
+
+        # handshake: expect ctrl_hello from worker — plaintext, no reason to encrypt...
+        try:
+            pkt = await read_one_packet(reader) # plaintext — ctrl_hello carries nothing to encrypt and must be readable before crypto is established.
         except (OSError, ValueError) as exc:
             logger.warning("Handshake went wrong from %s: %s", addr, exc)
             writer.close()
@@ -128,20 +132,20 @@ class MasterServer:
             return 
 
         worker_id_str, worker_id_int = self._assign_id()
-        conn = WorkerConnection(reader, writer, worker_id_str, worker_id_int)
-        self.workers[worker_id_str] = conn
+        connection = WorkerConnection(reader, writer, worker_id_str, worker_id_int, crypto)
+        self.workers[worker_id_str] = connection
 
-        # reply with ctrl_welcome carrying the assigned integer id
-        await net_send_welcome(conn.writer, conn._lock, worker_id_int)
+        # reply with ctrl_welcome carrying the assigned integer id — plaintext, no reason to encrypt...
+        await net_send_welcome(connection.writer, connection._lock, worker_id_int)
 
-        host, port = conn.address
-        logger.info(f"Worker connected: {conn.worker_id} , total workers = {len(self.workers)}")
+        host, port = connection.address
+        logger.info(f"Worker connected: {connection.worker_id} , total workers = {len(self.workers)}")
         await self.lb.register_worker(worker_id_str, host, port)
 
         try:
-            await self._session(conn)
+            await self._session(connection)
         finally:
-            self._disconnect(conn)
+            self._disconnect(connection)
 
     async def _session(self, conn: WorkerConnection) -> None:
         """
@@ -150,7 +154,7 @@ class MasterServer:
         """
         while True:
             try:
-                pkt = await read_one_packet(conn.reader)
+                pkt = await read_one_packet(conn.reader, crypto=conn.crypto)
             except Exception as exc:
                 logger.warning("[%s] cat read - error: %s", conn.worker_id, exc)
                 break
@@ -267,4 +271,3 @@ class MasterServer:
                 self.lb.start(),
                 task_pool_loop(self.lb)
             )
-            

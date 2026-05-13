@@ -13,6 +13,7 @@ from networking.packets import (
     ControlPacket, TaskPacket,
     PACKET_FLAGS, DISCONNECT_FLAGS,
 )
+from networking.encrypt_layer import SessionCrypto
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +42,7 @@ class WorkerClient:
         self.lock:   asyncio.Lock = asyncio.Lock()
         self.worker_id_int: int = 0 #will be assigned by master after hello handshake
         self.task_to_handle = asyncio.Semaphore(MAX_TASKS_TO_HANDLE)  # cap concurrent task execution
+        self.crypto: SessionCrypto | None = None  # AES session key — established during handshake
 
     #-------connection management ------------------------------------------------------------
     async def _connect(self) -> bool:
@@ -53,9 +55,16 @@ class WorkerClient:
         )
         self.lock = asyncio.Lock()   # fresh lock per connection
 
-        await net_send_hello(self.writer, self.lock, LISTEN_PORT)
+        # crypto handshake before anything else — establishes the shared AES key
+        try:
+            self.crypto = await SessionCrypto.worker_handshake(self.reader, self.writer, None)
+        except Exception as exc:
+            logger.error("[%s] crypto handshake failed: %s", self.worker_id, exc)
+            return False
 
-        pkt = await read_one_packet(self.reader)
+        await net_send_hello(self.writer, self.lock, LISTEN_PORT) # plaintext — no secrets, happens right after handshake
+
+        pkt = await read_one_packet(self.reader) # plaintext — ctrl_welcome must be readable before crypto is established - also nothing to hide there.
         if (not isinstance(pkt, ControlPacket)
                 or pkt.packet_type != PACKET_FLAGS.ctrl_welcome):
             logger.error("[%s] expected ctrl_welcome, got %s", self.worker_id, pkt)
@@ -72,6 +81,7 @@ class WorkerClient:
             self.writer.close()
             self.writer = None
             self.reader = None
+        self.crypto = None
 
     # -------CPU heartbeat loop ------------------------------------------------------------
     async def _cpu_heartbeat_loop(self) -> None:
@@ -85,7 +95,7 @@ class WorkerClient:
         while True:
             cpu = psutil.cpu_percent(interval=None)
             if self.writer:  # connection may have dropped
-                await net_send_status(self.writer, self.lock, self.worker_id_int, int(cpu))
+                await net_send_status(self.writer, self.lock, self.worker_id_int, int(cpu), crypto=self.crypto)
             logger.info(f"[{self.worker_id}] CPU heartbeat sent — CPU: {cpu:.2f}%")
             await asyncio.sleep(CPU_UPDATE_INTERVAL)
 
@@ -127,7 +137,7 @@ class WorkerClient:
                     self.ui.on_task_update(task_uuid, task_name, "FAILED")
                     self.ui.root.after(3000, self.ui.on_task_remove, task_uuid) # schedule removal with tkinter timer
                 if self.writer:  # connection may have dropped while task was running in executor
-                    await net_send_result(self.writer, self.lock, task)
+                    await net_send_result(self.writer, self.lock, task, crypto=self.crypto)
                 return
 
             logger.info("[%s] task %.8s done", self.worker_id, task_uuid)
@@ -135,7 +145,7 @@ class WorkerClient:
                 self.ui.on_task_update(task_uuid, task_name, "DONE")
                 self.ui.root.after(2000, self.ui.on_task_remove, task_uuid) ## schedule removal with tkinter timer
             if self.writer:  # connection may have dropped while task was running in executor
-                await net_send_result(self.writer, self.lock, task)
+                await net_send_result(self.writer, self.lock, task, crypto=self.crypto)
 
     # -----recive loop ----------------------------------------------------------------
     async def _receive_loop(self) -> None:
@@ -145,7 +155,7 @@ class WorkerClient:
         """
         while True:
             try:
-                pkt = await read_one_packet(self.reader) #read one packet at time.
+                pkt = await read_one_packet(self.reader, crypto=self.crypto) #read one packet at time.
             except Exception as exc:
                 logger.warning(f"[{self.worker_id}] Connection to master lost: {exc}")
                 break
@@ -191,7 +201,7 @@ class WorkerClient:
 
                 if self.writer:
                     try:
-                        await net_send_disconnect(self.writer, self.lock, self.worker_id_int, DISCONNECT_FLAGS.clean) #disconnect from master
+                        await net_send_disconnect(self.writer, self.lock, self.worker_id_int, DISCONNECT_FLAGS.clean, crypto=self.crypto) #disconnect from master
                     except Exception as exc:
                         logger.error(f"[{self.worker_id}] Error while sending disconnect: {exc}")
                         pass

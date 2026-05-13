@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import os
 import psutil
+from concurrent.futures import ProcessPoolExecutor
 
 from networking.network_io import (
     read_one_packet,
@@ -43,6 +45,9 @@ class WorkerClient:
         self.worker_id_int: int = 0 #will be assigned by master after hello handshake
         self.task_to_handle = asyncio.Semaphore(MAX_TASKS_TO_HANDLE)  # cap concurrent task execution
         self.crypto: SessionCrypto | None = None  # AES session key — established during handshake
+
+        cpu_count = os.cpu_count() or 2
+        self._executor = ProcessPoolExecutor(max_workers=max(2, cpu_count - 1))
 
     #-------connection management ------------------------------------------------------------
     async def _connect(self) -> bool:
@@ -129,14 +134,16 @@ class WorkerClient:
 
             loop = asyncio.get_event_loop()
             try:
-                await loop.run_in_executor(None, task.execute)
+                result = await loop.run_in_executor(self._executor, task.execute)
+                task.result = result
+                task.status = "DONE"
             except Exception as exc:
                 logger.error("[%s] task %.8s raised: %s", self.worker_id, task_uuid, exc)
-                task.status = "FAILED"   # match spelling in Task base class
+                task.status = "FAILED"
                 if self.ui:
                     self.ui.on_task_update(task_uuid, task_name, "FAILED")
-                    self.ui.root.after(3000, self.ui.on_task_remove, task_uuid) # schedule removal with tkinter timer
-                if self.writer:  # connection may have dropped while task was running in executor
+                    self.ui.root.after(3000, self.ui.on_task_remove, task_uuid)
+                if self.writer:
                     await net_send_result(self.writer, self.lock, task, crypto=self.crypto)
                 return
 

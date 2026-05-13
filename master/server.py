@@ -216,7 +216,15 @@ class MasterServer:
             return
 
         payload_uuid = task_obj.task_id  # uuid from the task object itself
-        result       = task_obj.result
+
+        # single bad packet can never crash the whole session.
+        result = getattr(task_obj, "result", None)
+        if result is None and task_obj.status not in ("FAILD", "FAILED"):
+            logger.error("[%s] task %.8s has no result — treating as failed", conn.worker_id, payload_uuid)
+            lb_task_id = self.payload_record.pop(payload_uuid, None)
+            if lb_task_id:
+                await self.lb.task_failed(conn.worker_id, lb_task_id, "missing_result")
+            return
 
         # translate payload uuid → TaskRecord uuid that the LB uses as key
         lb_task_id = self.payload_record.pop(payload_uuid, None)

@@ -14,10 +14,11 @@ class Task(ABC):
     all the de/serialize will be done later.
     """
 
-    def __init__(self, task_difficulty : float):
-        self.task_id = str(uuid.uuid4()) #random id ,128bit 
-        self.task_difficulty = task_difficulty #difficulty of the task, higher=harder
-        self.status = "CREATED" #status of the task: CREATED, RUNNING, DONE, FAILD
+    def __init__(self, task_difficulty: float):
+        self.task_id = str(uuid.uuid4())  # random id, 128bit
+        self.task_difficulty = task_difficulty  # difficulty of the task, higher=harder
+        self.status = "CREATED"  # status of the task: CREATED, RUNNING, DONE, FAILED
+        self.result = None  # set by execute() on completion; None until then
 
     @abstractmethod
     def execute(self):
@@ -29,6 +30,6 @@ class Task(ABC):
 
     @classmethod
     @abstractmethod
-    def from_bytes(cls, data : bytes) -> "Task":
+    def from_bytes(cls, data: bytes) -> "Task":
         pass
     

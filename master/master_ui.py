@@ -254,9 +254,6 @@ class MasterUI:
         self.show_control_panel()
 
     def on_kick(self, worker_id):
-        confirmed = messagebox.askyesno("Remove worker",
-                                        f"Are you sure you want to remove {worker_id}?")
-        if confirmed:
             import asyncio
             asyncio.get_event_loop().call_soon_threadsafe(
                 asyncio.ensure_future,

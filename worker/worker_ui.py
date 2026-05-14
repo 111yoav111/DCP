@@ -215,8 +215,7 @@ class WorkerUI:
         self.connect_callback = fn
 
     def on_remove_task(self, task_id: str):
-        confirmed = messagebox.askyesno("Remove task", f"Remove task {task_id[:8]}...?")
-        if confirmed and self.compute_panel:
+        if self.compute_panel:
             self.compute_panel.remove_task(task_id)
 
     def on_task_update(self, task_id: str, mission_name: str, status_text: str):

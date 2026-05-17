@@ -106,8 +106,11 @@ async def _write_locked(writer: asyncio.StreamWriter, lock: asyncio.Lock, data: 
 # --------send helper--------------------------------
 
 async def net_send_task(writer, lock, task, priority: int = 1, crypto: SessionCrypto = None) -> None:
-    """Master → worker: task_request packet."""
-    await _write_locked(writer, lock, build_task_packet(task, priority=priority), crypto)
+    """
+    Master → worker: task_request packet.
+    """
+    priority_int = priority.value if hasattr(priority, "value") else int(priority) 
+    await _write_locked(writer, lock, build_task_packet(task, priority=priority_int), crypto)
     logger.info("sent  task_request    uuid=%.8s", task.task_id)
 
 

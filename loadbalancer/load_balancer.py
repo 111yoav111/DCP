@@ -217,9 +217,9 @@ class LoadBalancer:
         ] = None
 
         # event handlers
-        self.on_worker_chage: list[Callable[[WorkerState], None]] = []
+        self.on_worker_change_cbs: list[Callable[[WorkerState], None]] = []
         self.on_task_done: list[Callable[[TaskRecord], None]] = []
-        self.on_metrics: list[Callable[[LBMetrics], None]] = []
+        self.on_metrics_cbs: list[Callable[[LBMetrics], None]] = []
 
         # internal state
         self.running = False
@@ -562,7 +562,7 @@ class LoadBalancer:
 
             metrics = await self._compute_metrics()
 
-            for callback in self.on_metrics:
+            for callback in self.on_metrics_cbs:
                 try:
                     callback(metrics)
 
@@ -628,16 +628,16 @@ class LoadBalancer:
         await self.unregister_worker(worker_id)
 
     def on_worker_status_change(self, cb):
-        self.on_worker_chage.append(cb)
+        self.on_worker_change_cbs.append(cb)
 
-    def on_task_done(self, cb):
+    def on_task_done_register(self, cb):
         self.on_task_done.append(cb)
 
     def on_metrics_update(self, cb):
-        self.on_metrics.append(cb)
+        self.on_metrics_cbs.append(cb)
 
     def _fire_worker_change(self, worker):
-        for callback in self.on_worker_chage:
+        for callback in self.on_worker_change_cbs:
             try:
                 callback(worker)
 
@@ -689,3 +689,4 @@ class LoadBalancer:
             "queue": queue_snapshot,
             "stats": { "completed": self._tasks_completed, "failed": self._tasks_failed,}
         }
+    

@@ -115,18 +115,16 @@ class WorkerClient:
         can run up to MAX_TASKS_TO_HANDLE tasks concurrently — had to do it bc UI froze (prob memory explode).
         """
         async with self.task_to_handle:
-            # update UI: loading
-            if self.ui:
-                self.ui.on_task_update(str(pkt.task_id), "Deserializing…", "LOADING")
-
+            # Deserialize first - beofre any UI update - so we have the real task_uuid.
+            # Using pkt.task_id (wire int) for LOADING and then task.task_id (payload UUID)
             try:
                 task = pkt.unpack_payload()
             except Exception as exc:
-                logger.error("[%s] deserialise failed wire_id=%d: %s",  self.worker_id, pkt.task_id, exc)
-                return   # no task to report back...
+                logger.error("[%s] deserialise failed wire_id=%d: %s", self.worker_id, pkt.task_id, exc)
+                return  # no task objec - nothing to show or send back
 
-            task_uuid = task.task_id
-            task_name = type(task).__name__ #task name for debug and UI display
+            task_uuid = task.task_id           # single key used for every UI call below
+            task_name = type(task).__name__
             logger.info("[%s] executing %s  uuid=%.8s", self.worker_id, task_name, task_uuid)
 
             if self.ui:

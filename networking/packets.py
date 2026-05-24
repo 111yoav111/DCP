@@ -39,7 +39,7 @@ class DISCONNECT_FLAGS(Enum):
     timeout    = 1   # heartbeat missed/smt with the heartbeat update interval
     task_crash = 2   # worker crashed mid-task
     overloaded = 3   # worker have voluntarily disconnecting due to load
-    unknown    = 10 #dk why disconnect
+    unknown    = 10  #dk why disconnect
 
 
 TASK_HEADER_FORMAT = '!B B B B I Q Q H H'
@@ -92,7 +92,7 @@ class TaskPacket:
     @classmethod
     def from_task(cls, task, packet_type: PACKET_FLAGS, task_type: TASK_FLAGS, status: STATUS_FLAGS, priority: int = 1, parent_id: int = None, subtask_index: int = None, total_subtasks: int = None) -> 'TaskPacket':
         """
-        create a TaskPacker from task object. it return the oject as an instance of TaskPacker with all the field filled (expect the payload)
+        create a TaskPacket from task object. it return the oject as an instance of TaskPacker with all the field filled (expect the payload)
 
         ALL THIS HAPPEN ON SENDER SIDE.
         """
@@ -278,7 +278,7 @@ class ControlPacket:
     
     @property
     def listen_port(self) -> int:
-         return (self.extra_info)
+         return self.extra_info
 
     def __repr__(self) -> str:
         match self.packet_type:
@@ -357,31 +357,6 @@ def build_result_packet(task) -> bytes:
           status=task.status
      )
      return pkt.to_bytes()
-
-def split_task(task, num_workers : int, priority : int = 1) -> list[bytes]:
-     """
-     happens only on master side, split a divisble task and encode each subtask
-     returns list of bytes ready to send, each part of the the list is a subtask.
-     """
-
-     subtasks = task.split_into_subtasks(num_workers)
-
-     if len(subtasks) == 1 and subtasks[0] == task:
-          return [build_task_packet(task, priority=priority)]
-     
-     parent_id = task.task_id
-     total = len(subtasks)
-
-     for sub in subtasks:
-          sub.task_id = next_id()
-
-     subtasks_list = []
-
-     for idx, sub in enumerate(subtasks):
-          packet = build_subtask_packet(sub, parent_id, idx, total, priority)
-          subtasks_list.append(packet)
-     
-     return subtasks_list
 
 #--------build the packet - control-----------
 

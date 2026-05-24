@@ -18,9 +18,7 @@ COL_ROW_EVN = "#ffffff"
 BTN_REMOVE  = "#e05555"
 BTN_CONNECT = "#4a7cff"
 
-ASSETS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets"
-)
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
 
 class LoginFrame(tk.Frame):
@@ -194,6 +192,7 @@ class WorkerUI:
         self.root.resizable(True, True)
         self.compute_panel = None
         self.connect_callback = None
+        self.cancel_callback = None  # set by main.py to client.cancel_task
         self.show_login()
 
     def show_login(self):
@@ -214,8 +213,14 @@ class WorkerUI:
     def set_connect_callback(self, fn):
         self.connect_callback = fn
 
+    def set_cancel_callback(self, fn):
+        self.cancel_callback = fn
+
     def on_remove_task(self, task_id: str):
-        if self.compute_panel:
+        confirmed = messagebox.askyesno("Remove task", f"Remove task {task_id[:8]}...?")
+        if confirmed and self.compute_panel:
+            if self.cancel_callback:
+                self.cancel_callback(task_id)  # cancel the running future in the client
             self.compute_panel.remove_task(task_id)
 
     def on_task_update(self, task_id: str, mission_name: str, status_text: str):

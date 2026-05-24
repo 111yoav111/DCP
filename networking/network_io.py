@@ -18,6 +18,7 @@ TASK_FLAG_VALUES = {f.value for f in PACKET_FLAGS if not f.name.startswith("ctrl
 async def read_one_packet(reader: asyncio.StreamReader, crypto: SessionCrypto = None) -> Union[ControlPacket, TaskPacket, None]:
     """
     Read exactly one packet from *reader*.
+
     Returns None on clean end of file, raises ValueError on bad data.
     """
     if crypto is not None:
@@ -73,6 +74,7 @@ async def read_one_packet(reader: asyncio.StreamReader, crypto: SessionCrypto = 
 def _parse_packet_from_bytes(data: bytes) -> Union[ControlPacket, TaskPacket]:
     """
     Parse a single complete packet from a decrypted bytes buffer.
+
     Only called from the encrypted read path — plaintext path reads incrementally.
     """
     if not data:
@@ -93,6 +95,7 @@ def _parse_packet_from_bytes(data: bytes) -> Union[ControlPacket, TaskPacket]:
 async def _write_locked(writer: asyncio.StreamWriter, lock: asyncio.Lock, data: bytes, crypto: SessionCrypto = None) -> None:
     """
     Write *data* to *writer* while holding *lock*.
+
     Used to serialize writes to the same StreamWriter from multiple tasks.
     """
     if crypto is not None:
@@ -106,17 +109,26 @@ async def _write_locked(writer: asyncio.StreamWriter, lock: asyncio.Lock, data: 
 # --------send helper--------------------------------
 
 async def net_send_task(writer, lock, task, priority: int = 1, crypto: SessionCrypto = None) -> None:
-    """
-    Master → worker: task_request packet.
-    """
-    priority_int = priority.value if hasattr(priority, "value") else int(priority) 
+    """Master -> worker: task_request packet."""
+    # priority may arrive as a TaskPriority enum; build_task_packet needs a plain int so translate them.
+    priority_int = priority.value if hasattr(priority, "value") else int(priority)
     await _write_locked(writer, lock, build_task_packet(task, priority=priority_int), crypto)
     logger.info("sent  task_request    uuid=%.8s", task.task_id)
 
 
+async def net_send_subtask(writer, lock, pkt_bytes: bytes, crypto: SessionCrypto = None) -> None:
+    """
+    Master -> worker: subtask_request packet (already serialised by build_subtask_packet).
+
+    The caller builds the bytes so it can set parent_id / subtask_index correctly.
+    """
+    await _write_locked(writer, lock, pkt_bytes, crypto)
+    logger.info("sent  subtask_request (%d B)", len(pkt_bytes))
+
+
 async def net_send_result(writer, lock, task, crypto: SessionCrypto = None) -> None:
     """
-    Worker → master: task_result or subtask_result packet.
+    Worker -> master: task_result or subtask_result packet.
     """
     if writer is None:  # connection may have dropped while task was running in executor
         logger.warning("net_send_result: writer is None, dropping result for %.8s", task.task_id)
@@ -127,7 +139,7 @@ async def net_send_result(writer, lock, task, crypto: SessionCrypto = None) -> N
 
 async def net_send_status(writer, lock, worker_id: int, cpu: int, crypto: SessionCrypto = None) -> None:
     """
-    Worker → master: ctrl_status (CPU %).
+    Worker -> master: ctrl_status (CPU %).
     """
     await _write_locked(writer, lock, build_status(worker_id, cpu), crypto)
     logger.debug("sent  ctrl_status     cpu=%d%%", cpu)
@@ -135,8 +147,9 @@ async def net_send_status(writer, lock, worker_id: int, cpu: int, crypto: Sessio
 
 async def net_send_hello(writer, lock, port: int) -> None:
     """
-    Worker → master: ctrl_hello.
-    Intentionally no crypto — sent before the AES key is established.
+    Worker -> master: ctrl_hello.
+
+    No need to encrypt since no important data inside.
     """
     await _write_locked(writer, lock, build_hello(port))
     logger.info("sent ctrl_hello port=%d", port)
@@ -144,7 +157,7 @@ async def net_send_hello(writer, lock, port: int) -> None:
 
 async def net_send_welcome(writer, lock, worker_id: int) -> None:
     """
-    Master → worker: ctrl_welcome.
+    Master -> worker: ctrl_welcome.
     Intentionally no crypto — sent before the AES key is established.
     """
     await _write_locked(writer, lock, build_welcome(worker_id))
@@ -157,3 +170,4 @@ async def net_send_disconnect(writer, lock, worker_id: int, reason: DISCONNECT_F
     """
     await _write_locked(writer, lock, build_disconnect(worker_id, reason), crypto)
     logger.info("sent  ctrl_disconnect worker_id=%d  reason=%s", worker_id, reason.name)
+    

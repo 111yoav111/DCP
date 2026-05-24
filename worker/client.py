@@ -23,9 +23,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-RECONNECT_DELAY      = 5   # seconds before retrying a lost connection
-CPU_UPDATE_INTERVAL  = 4   # seconds between CPU usage updates
-LISTEN_PORT          = 0   # placeholder sent in ctrl_hello (master never calls back)
+RECONNECT_DELAY = 5  # seconds before retrying a lost connection
+CPU_UPDATE_INTERVAL = 4  # seconds between CPU usage updates
+LISTEN_PORT = 0  # placeholder sent in ctrl_hello (master never calls back)
 MAX_TASKS_TO_HANDLE = 15  # max tasks running at the same time — prevents UI/memory overload
 
 
@@ -45,9 +45,10 @@ class WorkerClient:
         self.worker_id_int: int = 0 #will be assigned by master after hello handshake
         self.task_to_handle = asyncio.Semaphore(MAX_TASKS_TO_HANDLE)  # cap concurrent task execution
         self.crypto: SessionCrypto | None = None  # AES session key — established during handshake
+        self.task_futures: dict[str, asyncio.Future] = {}  # task_uuid : future(result), for canceling the task.
 
         cpu_count = os.cpu_count() or 2
-        self._executor = ProcessPoolExecutor(max_workers=max(2, cpu_count - 1))
+        self.executor = ProcessPoolExecutor(max_workers=max(2, cpu_count - 1))
 
     #-------connection management ------------------------------------------------------------
     async def _connect(self) -> bool:
@@ -87,6 +88,10 @@ class WorkerClient:
             self.writer = None
             self.reader = None
         self.crypto = None
+        # shut down the old executor to avoid leaking processes on reconnect, then create a fresh one
+        self.executor.shutdown(wait=False)
+        cpu_count = os.cpu_count() or 2  #how many cpu cores
+        self.executor = ProcessPoolExecutor(max_workers=max(2, cpu_count - 1))  #how many process will run, based on how many cpu cores, always leave 1 core free.
 
     # -------CPU heartbeat loop ------------------------------------------------------------
     async def _cpu_heartbeat_loop(self) -> None:
@@ -94,7 +99,7 @@ class WorkerClient:
         Send ctrl_status (CPU%) every CPU_UPDATE_INTERVAL seconds - 4sec.
         Replaces the old plain-text send — same loop structure, binary protocol.
         """
-        psutil.cpu_percent(interval=None)
+        psutil.cpu_percent(interval=None)  #use of cpu%
         await asyncio.sleep(0.1)
 
         while True:
@@ -113,6 +118,8 @@ class WorkerClient:
         runs on "run_in_executor" to avoid blocking the receive loop — allows running the heavy use tasks without freezing the UI or missing incoming packets from master.
 
         can run up to MAX_TASKS_TO_HANDLE tasks concurrently — had to do it bc UI froze (prob memory explode).
+
+        futures are tracked in task_futures so cancel_task() can cancel them when the user hits remove task (UI) - bascily delete task future.
         """
         async with self.task_to_handle:
             # Deserialize first - beofre any UI update - so we have the real task_uuid.
@@ -124,17 +131,29 @@ class WorkerClient:
                 return  # no task objec - nothing to show or send back
 
             task_uuid = task.task_id           # single key used for every UI call below
-            task_name = type(task).__name__
+            base_name = type(task).__name__
+            if getattr(task, "is_subtask", False) and task.subtask_index is not None:
+                task_name = f"{base_name} [subtask {task.subtask_index + 1}]"
+            else:
+                task_name = base_name
             logger.info("[%s] executing %s  uuid=%.8s", self.worker_id, task_name, task_uuid)
 
             if self.ui:
                 self.ui.on_task_update(task_uuid, task_name, "RUNNING")
 
-            loop = asyncio.get_event_loop()
+            execute_loop = asyncio.get_event_loop()
+            task_future = execute_loop.run_in_executor(self.executor, task.execute)
+            self.task_futures[task_uuid] = task_future  # register so it will be cancelable.
+
             try:
-                result = await loop.run_in_executor(self._executor, task.execute)
+                result = await task_future
                 task.result = result
                 task.status = "DONE"
+            except asyncio.CancelledError:
+                # user hit remove — clean up time.
+                logger.info("[%s] task %.8s cancelled by user", self.worker_id, task_uuid)
+                task.status = "FAILED"
+                return
             except Exception as exc:
                 logger.error("[%s] task %.8s raised: %s", self.worker_id, task_uuid, exc)
                 task.status = "FAILED"
@@ -144,6 +163,8 @@ class WorkerClient:
                 if self.writer:
                     await net_send_result(self.writer, self.lock, task, crypto=self.crypto)
                 return
+            finally:
+                self.task_futures.pop(task_uuid, None)  # always clean up the future slot
 
             logger.info("[%s] task %.8s done", self.worker_id, task_uuid)
             if self.ui:
@@ -151,6 +172,21 @@ class WorkerClient:
                 self.ui.root.after(2000, self.ui.on_task_remove, task_uuid) ## schedule removal with tkinter timer
             if self.writer:  # connection may have dropped while task was running in executor
                 await net_send_result(self.writer, self.lock, task, crypto=self.crypto)
+
+    def cancel_task(self, task_uuid: str) -> None:
+        """
+        Cancel a running task by uuid. Called when the user hit remove in the UI.
+
+        Cancels the asyncio future — which raises CancelledError inside _execute_task, which then clean up without sending a result back to master.
+
+        *ProcessPoolExecutor cant really kill the process mid-run, but for not awaiting for result - cancel() prevents it.
+        """
+        task_future = self.task_futures.get(task_uuid)
+        if task_future:
+            task_future.cancel()  # cancelt the future all back.
+            logger.info("[%s] canceled task %.8s", self.worker_id, task_uuid)
+        else:
+            logger.debug("[%s] cancel_task: %.8s not found (either done or bugged)", self.worker_id, task_uuid)
 
     # -----recive loop ----------------------------------------------------------------
     async def _receive_loop(self) -> None:
@@ -219,3 +255,4 @@ class WorkerClient:
                     self.ui.on_connection_change("Reconnecting…", color="black")
 
             await asyncio.sleep(RECONNECT_DELAY)
+            

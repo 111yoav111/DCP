@@ -1,23 +1,22 @@
 import asyncio
 import logging
-import random
 
-from loadbalancer.load_balancer import LoadBalancer, TaskRecord, WorkerStatus
-from loadbalancer.task_pool import task_pool_loop
-from networking.network_io import (
+from src.loadbalancer.load_balancer import LoadBalancer, TaskRecord, WorkerStatus
+from src.loadbalancer.task_pool import task_pool_loop
+from src.networking.network_io import (
     read_one_packet,
     net_send_task,
     net_send_subtask,
     net_send_welcome,
     net_send_disconnect,
 )
-from networking.packets import (
+from src.networking.packets import (
     ControlPacket, TaskPacket,
     PACKET_FLAGS, DISCONNECT_FLAGS,
-    build_subtask_packet, next_id,
+    build_subtask_packet
 )
-from networking.encrypt_layer import SessionCrypto, generate_rsa_keypair
-from tasks.divisible_task import DivisibleTask
+from src.networking.encrypt_layer import SessionCrypto, generate_rsa_keypair
+from src.tasks.divisible_task import DivisibleTask
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,7 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-HOST = "0.0.0.0"  # doesnt really matter, at school test just put ipv4 here
+HOST = "0.0.0.0"
 PORT = 9000
 CPU_MAX_USAGE = 80.0
 
@@ -73,9 +72,10 @@ class MasterServer:
         """
         Called by the LB dispatch loop to send a task to a worker.
 
-        If the task payload is a DivisibleTask AND at least MIN_WORKERS_TO_SPLIT available workers exist, task split to workers.
-        
-        The LB is informed via register_subtask_group so it can collect results and merge them.
+        If the task payload is a DivisibleTask AND at least MIN_WORKERS_TO_SPLIT
+        available workers exist, the task is split and each subtask is sent to a
+        different worker. The LB is informed via register_subtask_group so it can
+        collect results and merge them.
 
         Returns True on success, False on failure (LB re-queues the task).
         """
@@ -87,7 +87,7 @@ class MasterServer:
         payload = task.payload
 
         # --- split path ---
-        if isinstance(payload, DivisibleTask) and random.random() < 0.45:
+        if isinstance(payload, DivisibleTask):
             available = [
                 wid for wid, ws in self.lb.workers.items()
                 if ws.is_available
@@ -112,11 +112,17 @@ class MasterServer:
                          task.task_id, worker_id, exc)
             return False
 
-    async def _lb_send_split(self, task: TaskRecord, available_worker_ids: list[str], payload: DivisibleTask) -> bool:
+    async def _lb_send_split(
+        self,
+        task: TaskRecord,
+        available_worker_ids: list[str],
+        payload: DivisibleTask,
+    ) -> bool:
         """
         Split a DivisibleTask across all available workers and dispatch each subtask.
 
-        On any send failure the whole group is aborted and False is returned, so the LB re-queues the original task as a single unit.
+        On any send failure the whole group is aborted and False is returned so the
+        LB re-queues the original task as a single unit.
         """
         num_workers = len(available_worker_ids)
         subtasks = payload.split_into_subtasks(num_workers)
@@ -137,7 +143,7 @@ class MasterServer:
                 return False
 
         # assign one worker per subtask (round-robin if fewer workers than subtasks)
-        subtask_registry: list[tuple[str, int]] = []  # (payload_uuid, index)
+        subtask_registry: list[tuple[str, int]] = []   # (payload_uuid, index)
 
         for idx, subtask in enumerate(subtasks):
             target_id = available_worker_ids[idx % num_workers]
@@ -150,11 +156,11 @@ class MasterServer:
                 return False
 
             # assign a fresh wire-level integer id to the subtask
-            subtask.task_id = str(subtask.task_id)  # keep payload uuid intact
+            subtask.task_id = str(subtask.task_id)   # keep payload uuid intact
             try:
                 pkt_bytes = build_subtask_packet(
                     subtask,
-                    parent_id=0,  #wire parent_id, LB knows via uuid
+                    parent_id=0,          # wire parent_id unused — LB tracks via UUID
                     subtask_index=idx,
                     total_subtasks=len(subtasks),
                     priority=task.priority.value if hasattr(task.priority, "value") else int(task.priority),
@@ -166,7 +172,7 @@ class MasterServer:
                     self.payload_record.pop(uuid, None)
                 return False
 
-            # map subtask payload uuid -> parent TaskRecord uuid for result 
+            # map subtask payload uuid → parent TaskRecord uuid for result routing
             self.payload_record[subtask.task_id] = task.task_id
             subtask_registry.append((subtask.task_id, idx))
 
@@ -177,12 +183,17 @@ class MasterServer:
                     ws.active_task_ids.add(subtask.task_id)
                     ws.status = WorkerStatus.BUSY
 
-            logger.info("[lb_send_split] subtask %d/%d → %s  uuid=%.8s", idx + 1, len(subtasks), target_id, subtask.task_id)
+            logger.info(
+                "[lb_send_split] subtask %d/%d → %s  uuid=%.8s",
+                idx + 1, len(subtasks), target_id, subtask.task_id,
+            )
 
         # register the group with the LB so it can merge on completion
         self.lb.register_subtask_group(task, payload, subtask_registry)
-        logger.info("[lb_send_split] dispatched %d subtasks for parent %.8s", len(subtasks), task.task_id)
-
+        logger.info(
+            "[lb_send_split] dispatched %d subtasks for parent %.8s",
+            len(subtasks), task.task_id,
+        )
         return True
 
 
@@ -367,9 +378,9 @@ class MasterServer:
     def _disconnect(self, conn: WorkerConnection) -> None:
         """
         Clean up after a worker disconnects.
-
         Sets the worker OFFLINE in the LB and fires _fire_worker_change
-        BEFORE popping from the LB, so the master UI gets the OFFLINE event and removes the row. (unregister_worker pops without firing the callback.)
+        BEFORE popping from the LB, so the master UI gets the OFFLINE event
+        and removes the row. (unregister_worker pops without firing the callback.)
         """
         # mark OFFLINE in LB so UI removes the row — WorkerStatus already imported at top
         worker_state = self.lb.workers.get(conn.worker_id)

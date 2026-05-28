@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from tasks.task import Task
+from src.tasks.task import Task
 
 
 class DivisibleTask(Task, ABC):

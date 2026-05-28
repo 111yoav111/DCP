@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 
-from loadbalancer.load_balancer import LoadBalancer, WorkerState, LBMetrics, TaskRecord
+from src.loadbalancer.load_balancer import LoadBalancer, WorkerState, LBMetrics, TaskRecord
 
 APP_TITLE  = "DCP - Dynamic Compute Power"
 WIN_WIDTH  = 1080
@@ -24,8 +24,8 @@ COL_POPUP   = "#fffbe6"
 BTN_REMOVE  = "#e05555"
 BTN_CONNECT = "#4a7cff"
 
-ASSETS_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
-RENDERS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "renders")
+ASSETS_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
+RENDERS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "renders")
 
 
 class LoginFrame(tk.Frame):
@@ -146,7 +146,7 @@ class ControlPanel(tk.Frame):
         self._rows_frame.bind("<Configure>", lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")))
         self._canvas.bind("<Configure>", lambda e: self._canvas.itemconfig(self._cwin, width=e.width))
 
-        # Popups logs (right) — scrollable Text widget with timed fade per entry
+        # Popups log (right) — scrollable Text widget with timed fade per entry
         popup = tk.Frame(body, relief="groove", bd=1, bg=COL_POPUP, width=220)
         popup.pack(side="right", fill="y", padx=(8, 0))
         popup.pack_propagate(False)
@@ -160,15 +160,8 @@ class ControlPanel(tk.Frame):
         popup_sb.pack(side="right", fill="y")
         self.popup_text.pack(side="left", fill="both", expand=True, padx=4, pady=4)
         # track line numbers for scheduled fade-out {line_number: after_id}
-        self._popup_line = 0   # current line count
+        self._popup_line = 0       # current line count
         self._popup_fades: dict = {}
-
-        # status bar at the bottom screen
-        self._status_bar = tk.Label(
-            self, text="Workers: 0  |  Queue: 0  |  CPU: 0%  |  Done: 0  |  Failed: 0  |  Task Per Minute: 0/min",
-            font=FONT_SMALL, anchor="w", relief="sunken", bd=1, padx=6
-        )
-        self._status_bar.pack(fill="x", side="bottom")
 
     def add_or_update_worker(self, worker_id, ip, status_text):
         if worker_id in self.rows:
@@ -272,7 +265,7 @@ class MasterUI:
         self.lb.on_metrics_update(self.on_metrics)
         self.lb.on_task_done_register(self.on_task_done)
 
-    # ── LB callbacks (asyncio thread → root.after for thread safety) ──────────
+    # LB callback (asyncio thread -> root.after)
 
     def on_worker_change(self, ws: WorkerState):
         self.root.after(0, self._apply_worker_change, ws)
@@ -349,15 +342,8 @@ class MasterUI:
         self.root.after(0, self._apply_metrics, m)
 
     def _apply_metrics(self, m: LBMetrics):
-        if self.control_panel is None:
-            return
-        self.control_panel._status_bar.config(
-            text=(
-                f"Workers: {m.total_workers}  |  Queue: {m.queue_size}  |"
-                f"  CPU: {m.avg_cpu:.0f}%  |  Done: {m.tasks_completed}  |"
-                f"  Failed: {m.tasks_failed}  |  Task Per Minute: {m.throughput_per_min:.0f}/min"
-            )
-        )
+        pass  # hook ready — add a status bar here if needed
 
     def run(self):
         self.root.mainloop()
+        

@@ -18,8 +18,7 @@ COL_ROW_EVN = "#ffffff"
 BTN_REMOVE  = "#e05555"
 BTN_CONNECT = "#4a7cff"
 
-ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
-
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
 
 class LoginFrame(tk.Frame):
 

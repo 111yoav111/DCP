@@ -4,18 +4,18 @@ import os
 import psutil
 from concurrent.futures import ProcessPoolExecutor
 
-from networking.network_io import (
+from src.networking.network_io import (
     read_one_packet,
     net_send_result,
     net_send_status,
     net_send_hello,
     net_send_disconnect,
 )
-from networking.packets import (
+from src.networking.packets import (
     ControlPacket, TaskPacket,
     PACKET_FLAGS, DISCONNECT_FLAGS,
 )
-from networking.encrypt_layer import SessionCrypto
+from src.networking.encrypt_layer import SessionCrypto
 
 logging.basicConfig(
     level=logging.INFO,

@@ -1,5 +1,5 @@
 import numpy as np
-from tasks.divisible_task import DivisibleTask
+from src.tasks.divisible_task import DivisibleTask
 import pickle
 import zstandard as zstd
 

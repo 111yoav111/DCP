@@ -85,7 +85,8 @@ DCP/
 ### Prerequisites
 - Python 3.10+
 - Network-connected machines
-- Windows recommended 
+- Windows recommended
+  > Note: It should also work on Linux/macOS, though there may be some UI font issues.
 
 ### Installation
 ```bash
@@ -135,12 +136,14 @@ python tests/test_lb.py      # load balancer logic
 
 ## 📦 Built With 
 - [asyncio](https://docs.python.org/3/library/asyncio.html) - asynchronous networking and concurrency
+- [concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html) - parallel task execution across CPU cores
 - [cryptography](https://cryptography.io/en/latest/) - RSA key exchange and AES-256-GCM encryption
+- [Pillow](https://pillow.readthedocs.io/) - image processing and render output handling
 - [psutil](https://psutil.readthedocs.io/) - real-time CPU monitoring
 - [numpy](https://numpy.org/) - simulation and render tasks
 - [zstandard](https://python-zstandard.readthedocs.io/) - payload compression
 - [tkinter](https://docs.python.org/3/library/tkinter.html) - GUI
-
+  
 ## Author
 Yoav - @111yoav111
 

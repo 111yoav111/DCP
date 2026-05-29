@@ -99,7 +99,7 @@ class TaskPacket:
         pkt = cls.__new__(cls)
         pkt.packet_type = packet_type
         pkt.task_type = task_type
-        status_str = task.status if task.status != "FAILD" else "FAILED" #double check, for bugs or typo 
+        status_str = task.status
         pkt.status = STATUS_FLAGS[status_str] if status_str in STATUS_FLAGS.__members__ else STATUS_FLAGS.FAILED #check if its in the enum, yes-store it, no fail it.
         pkt.priority = max(0, min(255, priority)) # must be between 0 and 255
         pkt.task_id = next_id() 

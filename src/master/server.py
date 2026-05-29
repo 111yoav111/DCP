@@ -332,7 +332,7 @@ class MasterServer:
         payload_uuid  = task_obj.task_id
         is_subtask    = pkt.packet_type == PACKET_FLAGS.subtask_result
         subtask_index = pkt.subtask_index if pkt.subtask_index is not None else 0
-        is_failed     = task_obj.status in ("FAILD", "FAILED")
+        is_failed     = task_obj.status == "FAILED"
         result        = getattr(task_obj, "result", None)
 
         if result is None and not is_failed:

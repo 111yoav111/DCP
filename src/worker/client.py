@@ -141,7 +141,7 @@ class WorkerClient:
             if self.ui:
                 self.ui.on_task_update(task_uuid, task_name, "RUNNING")
 
-            execute_loop = asyncio.get_event_loop()
+            execute_loop = asyncio.get_running_loop()  # better than get_event_loop (more updated)
             task_future = execute_loop.run_in_executor(self.executor, task.execute)
             self.task_futures[task_uuid] = task_future  # register so it will be cancelable.
 

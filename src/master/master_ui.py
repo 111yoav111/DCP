@@ -230,8 +230,9 @@ class MasterUI:
     """
     Convert the LoadBalancer state and events the UI.
     """
-    def __init__(self, lb: LoadBalancer):
+    def __init__(self, lb: LoadBalancer, loop : asyncio.AbstractEventLoop):
         self.lb = lb
+        self.loop = loop
         self.root = tk.Tk()
         self.root.title(APP_TITLE)
         self.root.geometry(f"{WIN_WIDTH}x{WIN_HEIGHT}")
@@ -255,10 +256,13 @@ class MasterUI:
         self.show_control_panel()
 
     def on_kick(self, worker_id):
-            asyncio.get_event_loop().call_soon_threadsafe(
-                asyncio.ensure_future,
-                self.lb.kick_worker(worker_id, reason="manual_ui")
-            )
+        """
+        Connect the backend_loop to UI for allowing the kick, by sumbitting the coroutine to the backend thread (loop).
+        """
+        asyncio.run_coroutine_threadsafe(
+            self.lb.kick_worker(worker_id, reason= "normal-manual"),
+            self.loop  # the backend loop
+        )
 
     def wire_lb_callbacks(self):
         self.lb.on_worker_status_change(self.on_worker_change)

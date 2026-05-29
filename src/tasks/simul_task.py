@@ -55,11 +55,13 @@ class SimulationTask(DivisibleTask):
         return True
 
     def find_primes(self, start: int, end: int) -> list[int]:
-        prime_numbers = []
-        for n in range(start, end):
-            if self.is_prime(n):
-                prime_numbers.append(n)
-        return prime_numbers
+        primes_sieve = np.ones(end, dtype=bool)  # mark all True (primes)
+        primes_sieve[:2] = False
+        for i in range(2 , int(end ** 0.5) + 1):  # need to check only up to sqrt(end)
+            if primes_sieve[i]:
+                primes_sieve[i*i::i] = False  # mark all the multiples of i as not prime
+        
+        return [int(x) for x in np.where(primes_sieve)[0] if x >= start]
 
     def matrix_simulation(self, size: int, round_matrix: int) -> float:
         matrix = np.random.rand(size, size)

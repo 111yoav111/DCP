@@ -1,6 +1,7 @@
 import os
 import asyncio
 import numpy as np
+import threading
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
@@ -230,9 +231,10 @@ class MasterUI:
     """
     Convert the LoadBalancer state and events the UI.
     """
-    def __init__(self, lb: LoadBalancer, loop : asyncio.AbstractEventLoop):
+    def __init__(self, lb: LoadBalancer, loop : asyncio.AbstractEventLoop, on_start):
         self.lb = lb
         self.loop = loop
+        self.on_start = on_start
         self.root = tk.Tk()
         self.root.title(APP_TITLE)
         self.root.geometry(f"{WIN_WIDTH}x{WIN_HEIGHT}")
@@ -252,6 +254,13 @@ class MasterUI:
         self.control_panel.pack(fill="both", expand=True)
 
     def on_connect(self, ip, port):
+        """
+        Actual start with the values user input.
+        """
+        backend_thread = threading.Thread(
+            target=self.on_start, args=(ip, port), daemon=True
+        )
+        backend_thread.start()
         print(f"[MasterUI] Connect clicked , ip={ip} port={port}")
         self.show_control_panel()
 

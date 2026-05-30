@@ -12,15 +12,12 @@ def main() -> None:
     server = MasterServer()
     backend_loop = asyncio.new_event_loop()  # create the loop that runs the backend thread 
 
-    def run_backend():
+    def run_backend(host : str, port : int):
         # another thread to run, using Tkinter force you to run it on other thread.
         asyncio.set_event_loop(backend_loop)  # bind the loop to his parent - the thread. 
-        backend_loop.run_until_complete(server.start())
+        backend_loop.run_until_complete(server.start(host, port))
 
-    backend_thread = threading.Thread(target=run_backend, daemon=True)
-    backend_thread.start()
-
-    ui = MasterUI(server.lb, backend_loop)  # pass lb and backend main loop to UI
+    ui = MasterUI(server.lb, backend_loop, on_start=run_backend)  # pass lb ,backend loop and callback to start - to UI.
     ui.run()
 
 

@@ -393,12 +393,12 @@ class MasterServer:
         logger.info(f"Worker removed: {conn.worker_id} , total workers = {len(self.workers)}")
 
     #-------start the server -------------------------------------------------------------------   
-    async def start(self) -> None:
+    async def start(self, host : str = HOST, port : int = PORT) -> None:
         self.lb.set_kick_callback(self._force_disconnect)
         self.lb.set_send_callback(self._lb_send)
 
         server = await asyncio.start_server(
-            self._handle_worker, self.host, self.port
+            self._handle_worker, host, port
         )
         addr = server.sockets[0].getsockname()
         logger.info(f"Master listening on {addr[0]}:{addr[1]}")

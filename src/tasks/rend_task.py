@@ -1,7 +1,5 @@
 import numpy as np
 from src.tasks.divisible_task import DivisibleTask
-import pickle
-import zstandard as zstd
 
 
 class RenderTask(DivisibleTask):
@@ -148,10 +146,90 @@ class RenderTask(DivisibleTask):
             'shape': full_image.shape,
         }
 
-    def to_bytes(self) -> bytes:
-        """Serialization is handled externally by packet_codec (pickle+zstd)."""
-        return zstd.ZstdCompressor(level=3).compress(pickle.dumps(self))
+    def to_dict(self) -> dict:
+        """
+        Serialize the RenderTask to a plain dict for msgpack transport.
+        Converts numpy arrays in the scene to plain lists, and handles image_data bytes and shape tuple in the result.
+        """
+        # scene is bunch of numpy arrays, convert them to plain lists for msgpack
+        scene_serialized = [
+            {
+                "position" : obj["position"].tolist(),
+                "radius" : float(obj["radius"]),
+                "color" : obj["color"].tolist()
+            }
+            for obj in self.scene
+        ]
+        
+        task_dict = {
+            "type" : "render",
+            "task_id" : self.task_id,
+            "task_difficulty" : self.task_difficulty,
+            "status": self.status,
+            "width" : self.width,
+            "height" : self.height,
+            "row_start" : self.row_start,
+            "row_end" : self.row_end,
+            "scene" : scene_serialized,
+            # result - image_data is bytes, shape(width, height, 3(RGB)) is tuple
+            "result" : {
+                "image_data" : self.result["image_data"],
+                "row_start" : self.result["row_start"],
+                "row_end" : self.result["row_end"],
+                "shape" : list(self.result["shape"])
+            }
+            if self.result is not None else None,  # if no result from worker yet - None, else no
+            # subtask fields
+            "is_subtask" : getattr(self, "is_subtask", False),
+            "subtask_index" : getattr(self, "subtask_index", None),
+            "parent_task_id" : getattr(self, "parent_task_id", None)
+        }
 
+        return task_dict
+        
     @classmethod
-    def from_bytes(cls, data: bytes) -> 'RenderTask':
-        return pickle.loads(zstd.ZstdDecompressor().decompress(data))
+    def from_dict(cls, data: dict) -> 'RenderTask':
+        """
+        Reconstruct a RenderTask from a plain dict received via msgpack.
+        Rebuilds numpy arrays in the scene, restores result (image_data-bytes, shape-tuple)
+        """
+        scene = [
+            {
+                "position" : np.array(obj["position"]),
+                "radius" : obj["radius"],
+                "color" : np.array(obj["color"])
+            }
+            for obj in data["scene"]
+        ]
+
+        task = cls(
+            width = data["width"],
+            height = data["height"],
+            difficulty = data["task_difficulty"],
+            scene = scene,
+            row_start = data["row_start"],
+            row_end = data["row_end"]
+        )
+
+        # restore the base field of task
+        task.task_id = data["task_id"]
+        task.status = data["status"]
+
+        # restore result if it exist
+        if data["result"] is not None:
+            task.result = {
+                "image_data" : data["result"]["image_data"],
+                "row_start" : data["result"]["row_start"],
+                "row_end" : data["result"]["row_end"],
+                "shape" : tuple(data["result"]["shape"])
+            }
+        else:
+            task.result = None
+
+        # restore subtask fields, if needed
+        if data.get("is_subtask"):
+            task.is_subtask = data["is_subtask"]
+            task.subtask_index = data["subtask_index"]
+            task.parent_task_id = data["parent_task_id"]
+        
+        return task

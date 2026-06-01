@@ -8,8 +8,8 @@ class Task(ABC):
 
     every class must know how to:
     - execute itself (on worker side ofc)
-    - serialize itself to bytes (for network)
-    - deserialize itself from bytes (for receiving)
+    - serialize itself to dict (for msgpack transport)
+    - deserialize itself from dict (for receiving)
 
     all the de/serialize will be done later.
     """
@@ -25,11 +25,17 @@ class Task(ABC):
         pass
 
     @abstractmethod
-    def to_bytes(self) -> bytes:
+    def to_dict(self) -> dict:
+        """
+        Serialize task to a plain dict, used for the msgpack transport.
+        """
         pass
 
     @classmethod
     @abstractmethod
-    def from_bytes(cls, data: bytes) -> "Task":
+    def from_dict(cls, data: dict) -> "Task":
+        """
+        Reconstruct task from a plain dict received via msgpack.
+        """
         pass
     

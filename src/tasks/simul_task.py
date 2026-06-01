@@ -1,7 +1,6 @@
 import numpy as np
 from src.tasks.divisible_task import DivisibleTask
-import pickle
-import zstandard as zstd
+
 
 class SimulationTask(DivisibleTask):
 
@@ -20,9 +19,9 @@ class SimulationTask(DivisibleTask):
 
         if simulation_type == 'primes':
             if start_range is not None:
-                self.start_range = start_range
+                self.primes_start_range = start_range
             else:
-                self.start_range = 2
+                self.primes_start_range = 2
 
             if end_range is not None:
                 self.primes_end_range = end_range
@@ -80,12 +79,12 @@ class SimulationTask(DivisibleTask):
         self.status = "RUNNING"
 
         if self.simulation_type == 'primes':
-            primes = self.find_primes(self.start_range, self.primes_end_range)
+            primes = self.find_primes(self.primes_start_range, self.primes_end_range)
             result = {
                 'type': 'primes',
                 'primes': primes,
                 'count': len(primes),
-                'range': (self.start_range, self.primes_end_range)
+                'range': (self.primes_start_range, self.primes_end_range)
             }
 
         elif self.simulation_type == 'matrix':
@@ -134,12 +133,12 @@ class SimulationTask(DivisibleTask):
         return [self]
 
     def _split_primes(self, num_workers: int) -> list['SimulationTask']:
-        total = self.primes_end_range - self.start_range
+        total = self.primes_end_range - self.primes_start_range
         chunk = total // num_workers
         subtasks = []
 
         for i in range(num_workers):
-            s = self.start_range + i * chunk
+            s = self.primes_start_range + i * chunk
             e = s + chunk if i < num_workers - 1 else self.primes_end_range #for the last worker just set the range to end of total.
 
             st = SimulationTask(
@@ -186,7 +185,7 @@ class SimulationTask(DivisibleTask):
                 'type': 'primes',
                 'primes': all_primes,
                 'count': len(all_primes),
-                'range': (self.start_range, self.primes_end_range),
+                'range': (self.primes_start_range, self.primes_end_range),
             }
 
         if sim_type == 'monte_carlo':
@@ -203,9 +202,67 @@ class SimulationTask(DivisibleTask):
         
         return subtask_results[0] #for matrix since its not splitable...
 
-    def to_bytes(self) -> bytes:
-        return zstd.ZstdCompressor(level=3).compress(pickle.dumps(self))
+    def to_dict(self) -> dict:
+        """
+        Serialize the SimulationTask to a plain dict for msgpack transport.
+        """
+        taskb_dict = {
+            "type" : "simulation",
+            "task_id" : self.task_id,
+            "task_difficulty" : self.task_difficulty,
+            "status" : self.status,
+            "simulation_type" : self.simulation_type,
+            "result" : self.result,
+            # subtask fields
+            "is_subtask" : getattr(self, "is_subtask", False),
+            "subtask_index" : getattr(self, "subtask_index", None),
+            "parent_task_id" : getattr(self, "parent_task_id", None)
+        }
+        # find simulation type specific field - add them
+
+        if self.simulation_type == "primes":
+            taskb_dict["start_range"] = self.primes_start_range
+            taskb_dict["end_range"] = self.primes_end_range
+        
+        elif self.simulation_type == "matrix":
+            taskb_dict["matrix_size"] = self.matrix_size
+            taskb_dict["iterations"] = self.round_matrix
+
+        elif self.simulation_type == "monte_carlo":
+            taskb_dict["num_samples"] = self.arrows_thrown
+        
+        else:
+            raise ValueError(f"task type unknown")
+        
+        return taskb_dict
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> 'SimulationTask':
-        return pickle.loads(zstd.ZstdDecompressor().decompress(data))
+    def from_dict(cls, data: dict) -> 'SimulationTask':
+        """
+        Reconstruct a SimulationTask from a plain dict received via msgpack.
+        """
+        simul_type = data["simulation_type"]
+
+        # create object of task, and resore the actual task fields
+        task = cls(
+            simulation_type=simul_type,
+            difficulty=data["task_difficulty"],
+            start_range=data.get("start_range"),
+            end_range=data.get("end_range"),
+            matrix_size=data.get("matrix_size"),
+            iterations=data.get("iterations"),
+            num_samples=data.get("num_samples"),
+        )
+
+        # restore the base field of task
+        task.task_id = data["task_id"]
+        task.status = data["status"]
+        task.result = data["result"]
+
+        # restore subtask fields, if needed
+        if data.get("is_subtask"):
+            task.is_subtask = data["is_subtask"]
+            task.subtask_index = data["subtask_index"]
+            task.parent_task_id = data["parent_task_id"]
+
+        return task

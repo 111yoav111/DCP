@@ -164,6 +164,12 @@ class ControlPanel(tk.Frame):
         self._popup_line = 0       # current line count
         self._popup_fades: dict = {}
 
+        self._status_bar = tk.Label(
+            self, text="Workers: 0  |  Queue: 0  |  AVG-CPU: 0%  |  Done: 0  |  Failed: 0  |  Task Per Minute: 0/min",
+            font=FONT_SMALL, anchor="w", relief="sunken", bd=1, padx=6
+        )
+        self._status_bar.pack(fill="x", side="bottom")
+
     def add_or_update_worker(self, worker_id, ip, status_text):
         if worker_id in self.rows:
             self.rows[worker_id]["ip_lbl"].config(text=ip)
@@ -355,7 +361,15 @@ class MasterUI:
         self.root.after(0, self._apply_metrics, m)
 
     def _apply_metrics(self, m: LBMetrics):
-        pass  # hook ready — add a status bar here if needed
+        if self.control_panel is None:
+            return
+        self.control_panel._status_bar.config(
+            text=(
+                f"Workers: {m.total_workers}  |  Queue: {m.queue_size}  |"
+                f"  AVG-CPU: {m.avg_cpu:.0f}%  |  Done: {m.tasks_completed}  |"
+                f"  Failed: {m.tasks_failed}  |  Task Per Minute: {m.throughput_per_min:.0f}/min"
+            )
+        )
 
     def run(self):
         self.root.mainloop()

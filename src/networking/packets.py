@@ -1,7 +1,7 @@
 from enum import Enum 
 import struct
 import itertools
-import pickle
+import msgpack
 import zstandard as zstd
 from typing import Union
 
@@ -68,11 +68,29 @@ def next_id() -> int:
     """
     return next(id_counter)
 
+def task_from_dict(task_dict : dict):
+    """
+    Reconstruct the correct task object from a plain dict based on the task type field.
+
+    Called by unpack_payload() after msgpack deserialization.
+    """
+    # called inside the function to avoid circular imports, since both these files call packets.
+    from src.tasks.simul_task import SimulationTask
+    from src.tasks.rend_task import RenderTask
+
+    task_type = task_dict.get("type")
+    if task_type == "simulation":
+        return SimulationTask.from_dict(task_dict)
+    elif task_type == "render":
+        return RenderTask.from_dict(task_dict)
+    else:
+        raise ValueError(f"task type is unknown in the dict: {task_type}")
+    
 class TaskPacket:
     """
     Carries task or its result, over the network.
     
-    format: header(28 bytes) + payload(varible: zstd(pickle(task)))
+    format: header(28 bytes) + payload(varible: zstd(msgpack(task.to_dict())))
     
     loadbalancer read only the header, master and worker do the unpacking to the payload for getting the task object.
     """
@@ -107,8 +125,8 @@ class TaskPacket:
         pkt.subtask_index = subtask_index
         pkt.total_subtasks = total_subtasks
 
-        raw_pickle = pickle.dumps(task, protocol=pickle.HIGHEST_PROTOCOL)
-        pkt.raw_payload = zstd.ZstdCompressor(level=ZSTD_COMPRESS_LEVEL).compress(raw_pickle)
+        raw_msgpack = msgpack.packb(task.to_dict(), use_bin_type=True)
+        pkt.raw_payload = zstd.ZstdCompressor(level=ZSTD_COMPRESS_LEVEL).compress(raw_msgpack)
         return pkt 
 
     @classmethod
@@ -152,9 +170,10 @@ class TaskPacket:
 
     def unpack_payload(self):
         """
-        dicompress -> unpickle the payload, return object.
+        Decompress -> unpack msgpack -> reconstruct task object via task_from_dict.
         """
-        return pickle.loads(zstd.ZstdDecompressor().decompress(self.raw_payload))
+        task_dict = msgpack.unpackb(zstd.ZstdDecompressor().decompress(self.raw_payload), raw=False)
+        return task_from_dict(task_dict)
     
     def to_bytes(self) -> bytes:
         """

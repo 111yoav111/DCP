@@ -18,7 +18,7 @@ FRAME_LAYER_SIZE = struct.calcsize(FRAME_LAYER_FORMAT)
 
 def generate_rsa_keypair():
     """"
-    Generate a pair of RSA 2028 private keys.
+    Generate a pair of RSA 2048 private keys.
     Called once by MasterServer at startup; the same key pair is used for all workers connecting to the master.
     """
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=RSA_KEY_SIZE)

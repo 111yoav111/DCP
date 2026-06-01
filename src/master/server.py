@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 
 from src.loadbalancer.load_balancer import LoadBalancer, TaskRecord, WorkerStatus
 from src.loadbalancer.task_pool import task_pool_loop
@@ -87,7 +88,7 @@ class MasterServer:
         payload = task.payload
 
         # --- split path ---
-        if isinstance(payload, DivisibleTask):
+        if isinstance(payload, DivisibleTask) and random.random() < 0.45:
             available = [
                 wid for wid, ws in self.lb.workers.items()
                 if ws.is_available
@@ -172,7 +173,7 @@ class MasterServer:
                     self.payload_record.pop(uuid, None)
                 return False
 
-            # map subtask payload uuid → parent TaskRecord uuid for result routing
+            # map subtask payload uuid -> parent TaskRecord uuid for result routing
             self.payload_record[subtask.task_id] = task.task_id
             subtask_registry.append((subtask.task_id, idx))
 
@@ -183,17 +184,12 @@ class MasterServer:
                     ws.active_task_ids.add(subtask.task_id)
                     ws.status = WorkerStatus.BUSY
 
-            logger.info(
-                "[lb_send_split] subtask %d/%d → %s  uuid=%.8s",
-                idx + 1, len(subtasks), target_id, subtask.task_id,
-            )
+            logger.info("[lb_send_split] subtask %d/%d → %s  uuid=%.8s", idx + 1, len(subtasks), target_id, subtask.task_id)
 
         # register the group with the LB so it can merge on completion
         self.lb.register_subtask_group(task, payload, subtask_registry)
-        logger.info(
-            "[lb_send_split] dispatched %d subtasks for parent %.8s",
-            len(subtasks), task.task_id,
-        )
+        logger.info("[lb_send_split] dispatched %d subtasks for parent %.8s", len(subtasks), task.task_id)
+
         return True
 
 

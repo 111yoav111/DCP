@@ -8,6 +8,7 @@ DCP is a distributed computing system written in Python, designed to improve com
 ## ✨ Features
 - Custom binary packet protocol over TCP
 - Zstandard payload compression for reduced network overhead
+- Safe binary serialization via msgpack
 - RSA handshake for key exchange + AES-256-GCM transport encryption
 - Non-blocking async networking via asyncio
 - Multiprocessing task execution via ProcessPoolExecutor
@@ -25,7 +26,7 @@ DCP is a distributed computing system written in Python, designed to improve com
 
 - **Worker** — connects to the master, receives tasks, executes them using a `ProcessPoolExecutor`, and returns results.
 
-- **Networking** — custom binary protocol over TCP with AES-256-GCM encrypted communication for secure and efficient data transfer.
+- **Networking** — custom binary protocol over TCP using MessagePack (msgpack) serialization, Zstandard compression, and AES-256-GCM encrypted communication for secure and efficient data transfer.
 
 - **Tasks** — includes simulation workloads (primes, matrix operations, Monte Carlo simulations) and ray-tracing render tasks. Many tasks are divisible and can be split into subtasks for parallel execution across multiple workers.
 
@@ -137,6 +138,7 @@ python tests/test_lb.py      # load balancer logic
 ## 📦 Built With 
 - [asyncio](https://docs.python.org/3/library/asyncio.html) - asynchronous networking and concurrency
 - [concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html) - parallel task execution across CPU cores
+- [msgpack](https://msgpack-python.readthedocs.io/) - safe binary serialization
 - [cryptography](https://cryptography.io/en/latest/) - RSA key exchange and AES-256-GCM encryption
 - [Pillow](https://pillow.readthedocs.io/) - image processing and render output handling
 - [psutil](https://psutil.readthedocs.io/) - real-time CPU monitoring

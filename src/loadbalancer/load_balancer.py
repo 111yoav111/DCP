@@ -593,7 +593,7 @@ class LoadBalancer:
             if not self.queue:
                 return
 
-            tasks = tasks = heapq.nsmallest(3, self.queue)  # sort the the first 3 in queue will be smallest, prob the best- O(n log3)
+            tasks = heapq.nsmallest(3, self.queue)  # sort the the first 3 in queue will be smallest, prob the best- O(n log3)
         task = None
         worker = None
 

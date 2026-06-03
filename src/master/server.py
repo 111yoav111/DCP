@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 HOST = "0.0.0.0"
 PORT = 9000
-CPU_MAX_USAGE = 80.0
+CPU_MAX_USAGE = 90.0
 
 load_dotenv()
 DCP_TOKEN = os.getenv("DCP_TOKEN")

@@ -45,14 +45,6 @@ class SimulationTask(DivisibleTask):
             else:
                 self.arrows_thrown = 10_000_000
 
-    def is_prime(self, n: int) -> bool:
-        if n < 2:
-            return False
-        for i in range(2, n):
-            if n % i == 0:
-                return False
-        return True
-
     def find_primes(self, start: int, end: int) -> list[int]:
         primes_sieve = np.ones(end, dtype=bool)  # mark all True (primes)
         primes_sieve[:2] = False

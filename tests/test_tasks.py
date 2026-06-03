@@ -23,8 +23,9 @@ def test_render_task():
     image_data = np.frombuffer(result['image_data'], dtype=np.uint8).reshape(result['shape'])
 
     img = Image.fromarray(image_data, 'RGB')
-    img.save(RENDERS_DIR, "render_test_output.png")
-
+    os.makedirs(RENDERS_DIR, exist_ok=True)
+    img.save(os.path.join(RENDERS_DIR, "render_test_output.png"))
+    
     print("render test")
 
 def test_simulation_task():

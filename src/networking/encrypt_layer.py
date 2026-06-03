@@ -243,3 +243,30 @@ class SessionCrypto:
         async with lock:
             writer.write(frame)
             await writer.drain()
+
+#----------------auth helper------------------------------------------
+
+async def send_token(writer : asyncio.StreamWriter, token : str, crypto : SessionCrypto) -> None:
+    """
+    Encrypt and send the auto token to the master after the handshake.
+
+    Token is encrypted with the session AES key so its not showed as plaintext (altought the actual packet is the token - plaintxt).
+    """
+    token_bytes = token.encode("utf-8")
+    encrypted_token = crypto.encrypt(token_bytes)
+
+    writer.write(encrypted_token)
+    await writer.drain()
+
+async def receive_token(reader : asyncio.StreamReader, crypto : SessionCrypto) -> str:
+    """
+    Read and decrypt the token sent by the worker after handshake (and ctrl_hello).
+
+    Returns the token as plain string for checking if its the true token.
+    """
+    plain_token = await crypto.decrypt_from_reader(reader)
+    
+    if plain_token is None:
+        raise ValueError("Connection closed during auto part")
+    
+    return plain_token.decode("utf-8")

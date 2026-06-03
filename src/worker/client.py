@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import psutil
+from dotenv import load_dotenv
 from concurrent.futures import ProcessPoolExecutor
 
 from src.networking.network_io import (
@@ -15,7 +16,7 @@ from src.networking.packets import (
     ControlPacket, TaskPacket,
     PACKET_FLAGS, DISCONNECT_FLAGS,
 )
-from src.networking.encrypt_layer import SessionCrypto
+from src.networking.encrypt_layer import SessionCrypto, send_token
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +29,8 @@ CPU_UPDATE_INTERVAL = 4  # seconds between CPU usage updates
 LISTEN_PORT = 0  # placeholder sent in ctrl_hello (master never calls back)
 MAX_TASKS_TO_HANDLE = 15  # max tasks running at the same time — prevents UI/memory overload
 
+load_dotenv()
+DCP_TOKEN = os.getenv("DCP_TOKEN")
 
 class WorkerClient:
     """
@@ -53,7 +56,10 @@ class WorkerClient:
     #-------connection management ------------------------------------------------------------
     async def _connect(self) -> bool:
         """
-        Open TCP connection to master (using the real host IP), send ctrl_hello,
+        Open TCP connection to master (using the real host IP), send ctrl_hello, send the auth token.
+
+        If token is right, continue, if not - bye
+
         wait for ctrl_welcome.  Returns True on success.
         """
         self.reader, self.writer = await asyncio.open_connection(
@@ -69,6 +75,11 @@ class WorkerClient:
             return False
 
         await net_send_hello(self.writer, self.lock, LISTEN_PORT) # plaintext — no secrets, happens right after handshake
+
+        if DCP_TOKEN is None:
+            logger.error("[%s] DCP_TOKEN missing, not in .env", self.worker_id)
+            return False  # _connect will not work - worker will get disconnect.
+        await send_token(self.writer, DCP_TOKEN, self.crypto)  # send token to master.
 
         pkt = await read_one_packet(self.reader) # plaintext — ctrl_welcome must be readable before crypto is established - also nothing to hide there.
         if (not isinstance(pkt, ControlPacket)

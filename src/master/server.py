@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import random
+import os
+from dotenv import load_dotenv
 
 from src.loadbalancer.load_balancer import LoadBalancer, TaskRecord, WorkerStatus
 from src.loadbalancer.task_pool import task_pool_loop
@@ -16,7 +18,7 @@ from src.networking.packets import (
     PACKET_FLAGS, DISCONNECT_FLAGS,
     build_subtask_packet
 )
-from src.networking.encrypt_layer import SessionCrypto, generate_rsa_keypair
+from src.networking.encrypt_layer import SessionCrypto, generate_rsa_keypair, receive_token
 from src.tasks.divisible_task import DivisibleTask
 
 logging.basicConfig(
@@ -29,6 +31,8 @@ HOST = "0.0.0.0"
 PORT = 9000
 CPU_MAX_USAGE = 80.0
 
+load_dotenv()
+DCP_TOKEN = os.getenv("DCP_TOKEN")
 
 class WorkerConnection:
     """
@@ -236,6 +240,21 @@ class MasterServer:
             logger.warning("Expected ctrl_hello from %s, got %s — closing", addr, pkt)
             writer.close()
             return 
+        
+        # verify auth token
+        try:
+            token = await receive_token(reader, crypto)
+        except Exception as e:
+            logger.warning("Token read failed from %s: %s", addr, e)
+            writer.close()  # disconnect
+            return
+        
+        if not DCP_TOKEN or token != DCP_TOKEN:
+            logger.warning("Auth failed from %s , disconnecting worker", addr)
+            writer.close()
+            return
+        
+        logger.info("Auth part done - verified token from %s", addr)
 
         worker_id_str, worker_id_int = self._assign_id()
         connection = WorkerConnection(reader, writer, worker_id_str, worker_id_int, crypto)

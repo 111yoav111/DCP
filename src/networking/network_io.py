@@ -145,14 +145,14 @@ async def net_send_status(writer, lock, worker_id: int, cpu: int, crypto: Sessio
     logger.debug("sent  ctrl_status     cpu=%d%%", cpu)
 
 
-async def net_send_hello(writer, lock, port: int) -> None:
+async def net_send_hello(writer, lock) -> None:
     """
     Worker -> master: ctrl_hello.
 
     No need to encrypt since no important data inside.
     """
-    await _write_locked(writer, lock, build_hello(port))
-    logger.info("sent ctrl_hello port=%d", port)
+    await _write_locked(writer, lock, build_hello())  
+    logger.info("sent ctrl_hello")
 
 
 async def net_send_welcome(writer, lock, worker_id: int) -> None:

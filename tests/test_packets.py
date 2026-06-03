@@ -26,7 +26,7 @@ for i, st in enumerate(t.split_into_subtasks(num_workers=2)):
     assert st.is_subtask and st.subtask_index == i
 
 for raw, flag in [
-    (build_hello(9000),      PACKET_FLAGS.ctrl_hello),
+    (build_hello(),      PACKET_FLAGS.ctrl_hello),
     (build_welcome(1),       PACKET_FLAGS.ctrl_welcome),
     (build_heartbeat(1),     PACKET_FLAGS.ctrl_heartbeat),
     (build_disconnect(1),    PACKET_FLAGS.ctrl_disconnect),

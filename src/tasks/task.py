@@ -10,8 +10,6 @@ class Task(ABC):
     - execute itself (on worker side ofc)
     - serialize itself to dict (for msgpack transport)
     - deserialize itself from dict (for receiving)
-
-    all the de/serialize will be done later.
     """
 
     def __init__(self, task_difficulty: float):

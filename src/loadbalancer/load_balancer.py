@@ -62,7 +62,7 @@ class TaskPriority(int, Enum):
     LOW      = 4
 
 
-DIFFICULTY_CAPACITY_SCALE = 8.0 # Scale factor for converting task difficulty to capacity units
+DIFFICULTY_CAPACITY_SCALE = 6.0  # Scale factor for converting task difficulty to capacity units
 
 
 @dataclass

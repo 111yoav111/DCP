@@ -248,7 +248,7 @@ class SessionCrypto:
 
 async def send_token(writer : asyncio.StreamWriter, token : str, crypto : SessionCrypto) -> None:
     """
-    Encrypt and send the auto token to the master after the handshake.
+    Encrypt and send the auth token to the master after the handshake.
 
     Token is encrypted with the session AES key so its not showed as plaintext (altought the actual packet is the token - plaintxt).
     """
@@ -267,6 +267,6 @@ async def receive_token(reader : asyncio.StreamReader, crypto : SessionCrypto) -
     plain_token = await crypto.decrypt_from_reader(reader)
     
     if plain_token is None:
-        raise ValueError("Connection closed during auto part")
+        raise ValueError("Connection closed during auth part")
     
     return plain_token.decode("utf-8")

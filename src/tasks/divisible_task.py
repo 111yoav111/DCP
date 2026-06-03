@@ -24,7 +24,7 @@ class DivisibleTask(Task, ABC):
         """
         pass
 
-    def _mark_as_subtask(self, parent_id: str, subtask_index): #inside functinon name is _ because it should not be called outside of the class
+    def _mark_as_subtask(self, parent_id: str, subtask_index):
         """
         method for marking a task as a subtask.
         """

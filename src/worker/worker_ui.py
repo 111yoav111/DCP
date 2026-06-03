@@ -122,7 +122,9 @@ class ComputePanel(tk.Frame):
         if logo:
             tk.Label(title_bar, image=logo, bd=0).pack(side="left", padx=5)
         tk.Label(title_bar, text="Compute Panel", font=FONT_TITLE).pack(side="left", padx=15)
-        self.conn_label = tk.Label(title_bar, text="● Connected", font=FONT_SMALL, fg="green")
+        self.worker_id_label = tk.Label(title_bar, text="", font=FONT_TITLE, fg="#3B4226")
+        self.worker_id_label.pack(side="left", padx=5)
+        self.conn_label = tk.Label(title_bar, text="Connected", font=FONT_TITLE, fg="green")
         self.conn_label.pack(side="right", padx=10)
 
         # static column headers (not scrolled)
@@ -180,6 +182,9 @@ class ComputePanel(tk.Frame):
 
     def set_connection_status(self, text: str, color: str = "green"):
         self.conn_label.config(text=f"{text}", fg=color)
+
+    def set_worker_id(self, worker_id: str):
+        self.worker_id_label.config(text=f"— {worker_id}")
 
 
 class WorkerUI:
@@ -256,6 +261,13 @@ class WorkerUI:
         if self.compute_panel:
             self.compute_panel.set_connection_status(text, color)
 
+    def on_worker_id_assigned(self, worker_id: str):
+        """Update the worker ID label once master assigns an ID — safe to call from any thread."""
+        self.root.after(0, self._apply_worker_id, worker_id)
+
+    def _apply_worker_id(self, worker_id: str):
+        if self.compute_panel:
+            self.compute_panel.set_worker_id(worker_id)
+
     def run(self):
         self.root.mainloop()
-        

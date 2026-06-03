@@ -226,12 +226,12 @@ class ControlPacket:
         self.worker_id = worker_id
 
     @classmethod
-    def hello(cls, port : int):
+    def hello(cls):
         """
         worker -> master/loadbalancer, meaning start of connection - asking the master to assign an id.
         given paratmeter of port, so mastser know how to connect back.
         """
-        return cls(packet_type = PACKET_FLAGS.ctrl_hello, packet_flags = 0, extra_info = port, worker_id = 0)
+        return cls(packet_type = PACKET_FLAGS.ctrl_hello, packet_flags = 0, extra_info = 0, worker_id = 0)
     
     @classmethod
     def welcome(cls, assigned_worker_id : int):
@@ -304,7 +304,7 @@ class ControlPacket:
             case PACKET_FLAGS.ctrl_welcome:
                 info = f"worker_id={self.worker_id}"
             case PACKET_FLAGS.ctrl_hello:
-                info = f"port={self.listen_port}"
+                info = f"worker_id={self.worker_id}"
             case PACKET_FLAGS.ctrl_disconnect:
                 info = f"reason={self.disconnect_reason.name}"
             case PACKET_FLAGS.ctrl_status:
@@ -379,8 +379,8 @@ def build_result_packet(task) -> bytes:
 
 #--------build the packet - control-----------
 
-def build_hello(port : int) -> bytes:
-    return ControlPacket.hello(port).to_bytes()
+def build_hello() -> bytes:
+    return ControlPacket.hello().to_bytes()
 
 def build_welcome(worker_id : int) -> bytes:
      return ControlPacket.welcome(worker_id).to_bytes()

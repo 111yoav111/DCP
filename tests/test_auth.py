@@ -59,7 +59,7 @@ async def run_server(token_accept : str, result : list):
             return 
         
         # all passed - accept and welcome
-        await net_send_welcome(writer, lock, 1)
+        await net_send_welcome(writer, lock)
         result[0] = "accepted"
         writer.close()
     

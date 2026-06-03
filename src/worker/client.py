@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 RECONNECT_DELAY = 5  # seconds before retrying a lost connection
 CPU_UPDATE_INTERVAL = 4  # seconds between CPU usage updates
-LISTEN_PORT = 0  # placeholder sent in ctrl_hello (master never calls back)
 MAX_TASKS_TO_HANDLE = 15  # max tasks running at the same time — prevents UI/memory overload
 
 load_dotenv()
@@ -65,7 +64,7 @@ class WorkerClient:
         self.reader, self.writer = await asyncio.open_connection(
             self.host, self.port
         )
-        self.lock = asyncio.Lock()   # fresh lock per connection
+        self.lock = asyncio.Lock()  # fresh lock per connection
 
         # crypto handshake before anything else — establishes the shared AES key
         try:
@@ -74,7 +73,7 @@ class WorkerClient:
             logger.error("[%s] crypto handshake failed: %s", self.worker_id, exc)
             return False
 
-        await net_send_hello(self.writer, self.lock, LISTEN_PORT) # plaintext — no secrets, happens right after handshake
+        await net_send_hello(self.writer, self.lock) # plaintext — no secrets, happens right after handshake
 
         if DCP_TOKEN is None:
             logger.error("[%s] DCP_TOKEN missing, not in .env", self.worker_id)
@@ -88,9 +87,11 @@ class WorkerClient:
             return False
 
         self.worker_id_int = pkt.worker_id
+        self.worker_id = f"worker-{self.worker_id_int}"  # update to match master's assignment
         logger.info(f"[{self.worker_id}] Connected to master at {self.host}:{self.port} (assigned id={self.worker_id_int})")
         if self.ui:
             self.ui.on_connection_change("Connected", color="blue")
+            self.ui.on_worker_id_assigned(self.worker_id)  # show assigned ID in UI
         return True
 
     def _close(self) -> None:
@@ -101,8 +102,8 @@ class WorkerClient:
         self.crypto = None
         # shut down the old executor to avoid leaking processes on reconnect, then create a fresh one
         self.executor.shutdown(wait=False)
-        cpu_count = os.cpu_count() or 2  #how many cpu cores
-        self.executor = ProcessPoolExecutor(max_workers=max(2, cpu_count - 1))  #how many process will run, based on how many cpu cores, always leave 1 core free.
+        cpu_core_count = os.cpu_count() or 2
+        self.executor = ProcessPoolExecutor(max_workers=max(2, cpu_core_count - 1))  #how many process will run, based on how many cpu cores, always leave 1 core free.
 
     # -------CPU heartbeat loop ------------------------------------------------------------
     async def _cpu_heartbeat_loop(self) -> None:

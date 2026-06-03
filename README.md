@@ -10,6 +10,7 @@ DCP is a distributed computing system written in Python, designed to improve com
 - Zstandard payload compression for reduced network overhead
 - Safe binary serialization via msgpack
 - RSA handshake for key exchange + AES-256-GCM transport encryption
+- Master-worker authentication via a pre-shared token - workers must present a valid token before the master accepts the connection; invalid or missing tokens are rejected immediately
 - Non-blocking async networking via asyncio
 - Multiprocessing task execution via ProcessPoolExecutor
 - Dynamic load balancing based on real time CPU usage and task difficulty
@@ -72,7 +73,8 @@ DCP/
 ├── tests/
 │   ├── test_tasks.py
 │   ├── test_packets.py
-│   └── test_lb.py
+│   ├── test_lb.py
+│   └── test_auth.py
 ├── assets/
 ├── renders/
 ├── .gitignore
@@ -127,12 +129,22 @@ python src/worker/main_worker.py
 - Worker nodes must connect using the master’s IP address
 - Default communication port: 9000
 
+## 🔐 Auth Setup
+- Both master and worker machines must have a `.env` file in the project root
+- The `.env` file must contain a matching `DCP_TOKEN` value on all machines
+- Example `.env`:
+  ```txt
+  DCP_TOKEN="secret_token123"
+  ```
+- Workers with a missing or invalid token are rejected during connection authentication
+
 ## ✅ Tests
 To test individual components of the project:
 ```
 python tests/test_tasks.py   # render + simulation tasks
 python tests/test_packets.py # packet protocol
 python tests/test_lb.py      # load balancer logic
+python tests/test_auth.py    # worker auth token verification 
 ```
 
 ## 📦 Built With 
@@ -142,10 +154,10 @@ python tests/test_lb.py      # load balancer logic
 - [cryptography](https://cryptography.io/en/latest/) - RSA key exchange and AES-256-GCM encryption
 - [Pillow](https://pillow.readthedocs.io/) - image processing and render output handling
 - [psutil](https://psutil.readthedocs.io/) - real-time CPU monitoring
+- [python-dotenv](https://pypi.org/project/python-dotenv/) - loads auth token from .env file
 - [numpy](https://numpy.org/) - simulation and render tasks
 - [zstandard](https://python-zstandard.readthedocs.io/) - payload compression
 - [tkinter](https://docs.python.org/3/library/tkinter.html) - GUI
   
 ## Author
 Yoav - @111yoav111
-

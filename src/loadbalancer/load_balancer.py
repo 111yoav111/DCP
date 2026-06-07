@@ -252,7 +252,29 @@ class LBMetrics:
 
 class LoadBalancer:
     """
-    
+    The conductor coordinating and distributing tasks across connected workers.
+
+    The LoadBalancer sits between the server and the workers, the server submits tasks to it, and it decides when and where to send them, it is used by master side only.
+    It runs three continuous async loops: 
+        - dispatch loop that pulls tasks from the priority queue and matches them to available workers
+        - heartbeat loop that detects and handles worker disconnections
+        - metrics loop that snapshots the system state for the UI every few seconds
+
+    Tasks are stored in a heapq - heap with priorities, that ordered by priority and enqueue time,
+    so critical tasks always dispatch first with a FIFO happening in the same priority level.
+    If task cant match a worker, the task is skipped - but after MAX_SKIPS skips it is force-dispatched to prevent queue blocking.
+
+    For divisible tasks (render, primes, monte carlo), LB coordinates splitting them across multi workers based on each worker's free CPU capacity;
+    LB tracks all subtasks of task under a SubtaskGroup and automatically merge their results once they all done.
+
+    Worker CPU usage is updated via heartbeat packets sent by each worker every few seconds.
+    A worker that goes silent for HEARTBEAT_TIMEOUT seconds is marked OFFLINE,
+    all tasks it was running are recovered back to the heapq via self.tasks (keeps every task alive in dict memory until completion).
+
+    The LB communicates with callbacks:
+        - send_task_cb - to actually send a task over the network
+        - kick_worker_cb - to forcibly disconnect a worker
+        - event lists (on_task_done, on_worker_change_cbs, on_metrics_cbs) - for giving server and UI real-time updates about LB responsibilities.
     """
     HEARTBEAT_TIMEOUT = 15.0
     DISPATCH_INTERVAL = 0.2

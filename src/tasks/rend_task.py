@@ -94,35 +94,41 @@ class RenderTask(DivisibleTask):
 
     # ── split / merge ─────────────────────────────────────────────────────────
 
-    def split_into_subtasks(self, num_workers: int = 1) -> list['RenderTask']:
+    def _split_by_weights(self, weights: list[float]) -> list['RenderTask']:
         """
-        Split the render by rows — each subtask gets an equal rows to work.
-        Every subtask is fully independent (same scene(total img), different row range).
+        Split the render by rows based on each workers free capacity.
+
+        Ex with weights=[0.419, 0.581] with 512 rows to render:
+            worker 0(1) gets around 214 rows
+            worker 1(2) gets around 297 rows
         """
         total_rows = self.row_end - self.row_start
 
-        # not worth splitting if there are fewer rows than workers
-        if num_workers <= 1 or total_rows < num_workers:
+        if total_rows < len(weights):
             return [self]
 
-        rows_per_worker = total_rows // num_workers
+        # convert weights to integer row counts (must sum exactly to total_rows)
+        row_chunks = [int(weight * total_rows) for weight in weights]
+        row_chunks[-1] += total_rows - sum(row_chunks)  # add the leftover to worker, fix rounding.
+
         subtasks = []
+        cursor = self.row_start
 
-        for i in range(num_workers):
-            r_start = self.row_start + i * rows_per_worker
-            r_end   = r_start + rows_per_worker if i < num_workers - 1 else self.row_end # last worker gets any leftover rows
+        for idx, rows in enumerate(row_chunks):
+            r_start = cursor
+            r_end   = r_start + rows
 
-
-            st = RenderTask(
-                width = self.width,
-                height = self.height,
-                difficulty = self.task_difficulty / num_workers,
-                scene = self.scene,        
-                row_start = r_start,
-                row_end = r_end,
+            subtask = RenderTask(
+                width=self.width,
+                height=self.height,
+                difficulty=self.task_difficulty * weights[idx],
+                scene=self.scene,
+                row_start=r_start,
+                row_end=r_end,
             )
-            st._mark_as_subtask(self.task_id, i)
-            subtasks.append(st)
+            subtask._mark_as_subtask(self.task_id, idx, weight=weights[idx])
+            subtasks.append(subtask)
+            cursor = r_end
 
         return subtasks
 
@@ -182,7 +188,8 @@ class RenderTask(DivisibleTask):
             # subtask fields
             "is_subtask" : getattr(self, "is_subtask", False),
             "subtask_index" : getattr(self, "subtask_index", None),
-            "parent_task_id" : getattr(self, "parent_task_id", None)
+            "parent_task_id" : getattr(self, "parent_task_id", None),
+            "subtask_weight" : getattr(self, "subtask_weight", None)
         }
 
         return task_dict
@@ -231,5 +238,7 @@ class RenderTask(DivisibleTask):
             task.is_subtask = data["is_subtask"]
             task.subtask_index = data["subtask_index"]
             task.parent_task_id = data["parent_task_id"]
+            task.subtask_weight = data.get("subtask_weight")
         
         return task
+    

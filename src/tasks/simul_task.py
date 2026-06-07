@@ -48,10 +48,10 @@ class SimulationTask(DivisibleTask):
     def find_primes(self, start: int, end: int) -> list[int]:
         primes_sieve = np.ones(end, dtype=bool)  # mark all True (primes)
         primes_sieve[:2] = False
-        for i in range(2 , int(end ** 0.5) + 1):  # need to check only up to sqrt(end)
+        for i in range(2, int(end ** 0.5) + 1):  # need to check only up to sqrt(end)
             if primes_sieve[i]:
                 primes_sieve[i*i::i] = False  # mark all the multiples of i as not prime
-        
+
         return [int(x) for x in np.where(primes_sieve)[0] if x >= start]
 
     def matrix_simulation(self, size: int, round_matrix: int) -> float:
@@ -97,68 +97,74 @@ class SimulationTask(DivisibleTask):
             }
 
         self.status = "DONE"
-        self.result = result 
+        self.result = result
         return result
 
-
-    def split_into_subtasks(self, num_workers: int = 1) -> list['SimulationTask']:
+    def _split_by_weights(self, weights: list[float]) -> list['SimulationTask']:
         """
-        split the task(self) into the num of worker equaly 
+        Task-specific split: routes to the correct split method by simulation type.
 
-        split strategy:
-        prime -> split the number range evenly across workers.
-        monte_carlo -> split the arrow count across workers.
-        matrix -> unfort, cant be split cuz each round depends on previous.
-
-        return [self] which is the list of the subtasks
+        matrix is not splittable so returns as is-[self].
         """
-        if num_workers <= 1:
-            return [self]
-
         if self.simulation_type == 'primes':
-            return self._split_primes(num_workers)
+            return self._split_primes(weights)
 
         if self.simulation_type == 'monte_carlo':
-            return self._split_monte_carlo(num_workers)
+            return self._split_monte_carlo(weights)
 
         # matrix: not splittable, run on a single worker as-is
         return [self]
 
-    def _split_primes(self, num_workers: int) -> list['SimulationTask']:
+    def _split_primes(self, weights: list[float]) -> list['SimulationTask']:
+        """
+        Split the prime-search range across workers based on to their free capacity.
+
+        Ex with weights=[0.419, 0.581] and range 2->1_000_000:
+            worker 0(1) gets range 2 -> 419_000
+            worker 1(2) gets range 419_001 -> 1_000_000
+        """
         total = self.primes_end_range - self.primes_start_range
-        chunk = total // num_workers
+
+        # convert weights to integer chunk sizes (must sum exactly to total)
+        chunks = [int(w * total) for w in weights]
+        chunks[-1] += total - sum(chunks)  # give leftover to the last worker
+
         subtasks = []
+        curr = self.primes_start_range
 
-        for i in range(num_workers):
-            s = self.primes_start_range + i * chunk
-            e = s + chunk if i < num_workers - 1 else self.primes_end_range #for the last worker just set the range to end of total.
-
-            st = SimulationTask(
-                simulation_type = 'primes',
-                difficulty = self.task_difficulty / num_workers,
-                start_range = s,
-                end_range = e,
+        for idx, chunk in enumerate(chunks):
+            start = curr
+            end = start + chunk
+            subtask = SimulationTask(
+                simulation_type='primes',
+                difficulty=self.task_difficulty * weights[idx],
+                start_range=start,
+                end_range=end,
             )
-            st._mark_as_subtask(self.task_id, i)
-            subtasks.append(st)
+            subtask._mark_as_subtask(self.task_id, idx, weight=weights[idx])
+            subtasks.append(subtask)
+            curr = end
 
         return subtasks
 
-    def _split_monte_carlo(self, num_workers: int) -> list['SimulationTask']:
-        base_arrows = self.arrows_thrown // num_workers
+    def _split_monte_carlo(self, weights: list[float]) -> list['SimulationTask']:
+        """
+        Split the arrow count across workers based on to their free capacity.
+        """
+        total = self.arrows_thrown
+
+        chunks = [int(w * total) for w in weights]
+        chunks[-1] += total - sum(chunks)  # leftover to worker, fix rounding.
+
         subtasks = []
-
-        for i in range(num_workers):
-            remaining_arrows = self.arrows_thrown - (i * base_arrows) 
-            arrows = min(base_arrows, remaining_arrows) if i < num_workers - 1 else remaining_arrows #if its last he get what left
-
-            st = SimulationTask(
-                simulation_type = 'monte_carlo',
-                difficulty = self.task_difficulty / num_workers,
-                num_samples = arrows,
+        for idx, arrows in enumerate(chunks):
+            subtask = SimulationTask(
+                simulation_type='monte_carlo',
+                difficulty=self.task_difficulty * weights[idx],
+                num_samples=arrows,
             )
-            st._mark_as_subtask(self.task_id, i)
-            subtasks.append(st)
+            subtask._mark_as_subtask(self.task_id, idx, weight=weights[idx])
+            subtasks.append(subtask)
 
         return subtasks
 
@@ -191,41 +197,41 @@ class SimulationTask(DivisibleTask):
                 'arrows_thrown': total_arrows,
             }
 
-        
-        return subtask_results[0] #for matrix since its not splitable...
+        return subtask_results[0]  # for matrix since its not splittable...
 
     def to_dict(self) -> dict:
         """
         Serialize the SimulationTask to a plain dict for msgpack transport.
         """
         taskb_dict = {
-            "type" : "simulation",
-            "task_id" : self.task_id,
-            "task_difficulty" : self.task_difficulty,
-            "status" : self.status,
-            "simulation_type" : self.simulation_type,
-            "result" : self.result,
+            "type": "simulation",
+            "task_id": self.task_id,
+            "task_difficulty": self.task_difficulty,
+            "status": self.status,
+            "simulation_type": self.simulation_type,
+            "result": self.result,
             # subtask fields
-            "is_subtask" : getattr(self, "is_subtask", False),
-            "subtask_index" : getattr(self, "subtask_index", None),
-            "parent_task_id" : getattr(self, "parent_task_id", None)
+            "is_subtask": getattr(self, "is_subtask", False),
+            "subtask_index": getattr(self, "subtask_index", None),
+            "parent_task_id": getattr(self, "parent_task_id", None),
+            "subtask_weight": getattr(self, "subtask_weight", None)
         }
         # find simulation type specific field - add them
 
         if self.simulation_type == "primes":
             taskb_dict["start_range"] = self.primes_start_range
             taskb_dict["end_range"] = self.primes_end_range
-        
+
         elif self.simulation_type == "matrix":
             taskb_dict["matrix_size"] = self.matrix_size
             taskb_dict["iterations"] = self.round_matrix
 
         elif self.simulation_type == "monte_carlo":
             taskb_dict["num_samples"] = self.arrows_thrown
-        
+
         else:
             raise ValueError(f"task type unknown")
-        
+
         return taskb_dict
 
     @classmethod
@@ -235,7 +241,7 @@ class SimulationTask(DivisibleTask):
         """
         simul_type = data["simulation_type"]
 
-        # create object of task, and resore the actual task fields
+        # create object of task, and restore the actual task fields
         task = cls(
             simulation_type=simul_type,
             difficulty=data["task_difficulty"],
@@ -256,5 +262,7 @@ class SimulationTask(DivisibleTask):
             task.is_subtask = data["is_subtask"]
             task.subtask_index = data["subtask_index"]
             task.parent_task_id = data["parent_task_id"]
+            task.subtask_weight = data.get("subtask_weight")
 
         return task
+    

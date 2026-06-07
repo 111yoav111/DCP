@@ -184,7 +184,7 @@ class ComputePanel(tk.Frame):
         self.conn_label.config(text=f"{text}", fg=color)
 
     def set_worker_id(self, worker_id: str):
-        self.worker_id_label.config(text=f"— {worker_id}")
+        self.worker_id_label.config(text=f"-> {worker_id}")
 
 
 class WorkerUI:

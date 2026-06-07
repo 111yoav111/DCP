@@ -145,7 +145,9 @@ class WorkerClient:
             task_uuid = task.task_id           # single key used for every UI call below
             base_name = type(task).__name__
             if getattr(task, "is_subtask", False) and task.subtask_index is not None:
-                task_name = f"{base_name} [subtask {task.subtask_index + 1}]"
+                subtask_weight = getattr(task, "subtask_weight", None)
+                weight_str = f" {subtask_weight * 100:.1f}%" if subtask_weight is not None else ""
+                task_name = f"{base_name} [subtask {task.subtask_index + 1} -> {weight_str}]"
             else:
                 task_name = base_name
             logger.info("[%s] executing %s  uuid=%.8s", self.worker_id, task_name, task_uuid)
@@ -267,4 +269,3 @@ class WorkerClient:
                     self.ui.on_connection_change("Reconnecting…", color="black")
 
             await asyncio.sleep(RECONNECT_DELAY)
-            

@@ -8,9 +8,9 @@ from src.loadbalancer.load_balancer import LoadBalancer, TaskPriority
 
 logger = logging.getLogger("TaskPool")
 
-BASE_INTERVAL = 2.5 #second between task gen per 1 worker
+BASE_INTERVAL = 1.5 #second between task gen per 1 worker
 MIN_INTERVAL = 0.5 #never gen faster than this
-MAX_QUEUE_PER_WORKER = 6 #stop gen if queue has more than MAX_QUEUE_PER_WORKER tasks per worker
+MAX_QUEUE_PER_WORKER = 8 #stop gen if queue has more than MAX_QUEUE_PER_WORKER tasks per worker
 
 
 #--------difficulty measurements-------------

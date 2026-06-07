@@ -94,13 +94,19 @@ class MasterServer:
         # --- split path ---
         if isinstance(payload, DivisibleTask) and random.random() < 0.45:
             available = [
-                wid for wid, ws in self.lb.workers.items()
+                w_id for w_id, ws in self.lb.workers.items()
                 if ws.is_available
             ]
             num_workers = len(available)
 
             if num_workers >= self.lb.MIN_WORKERS_TO_SPLIT:
-                return await self._lb_send_split(task, available, payload)
+                # collect the cpu% for each available worker so the split can create weight loads.
+                worker_loads = []
+                for w_id in available:
+                    worker = self.lb.workers[w_id]
+                    worker_loads.append(worker.cpu_usage)
+                
+                return await self._lb_send_split(task, available, payload, worker_loads)
 
         # --- normal single-worker path ---
         try:
@@ -122,15 +128,19 @@ class MasterServer:
         task: TaskRecord,
         available_worker_ids: list[str],
         payload: DivisibleTask,
+        worker_loads: list[float],
     ) -> bool:
         """
-        Split a DivisibleTask across all available workers and dispatch each subtask.
+        Split a DivisibleTask across available workers and dispatch each subtask.
+
+        worker_loads: CPU% per worker (same order as available_worker_ids).
+        worker_loads is passed to split_into_subtasks so the task is divided based on each workers free capacity.
 
         On any send failure the whole group is aborted and False is returned so the
         LB re-queues the original task as a single unit.
         """
         num_workers = len(available_worker_ids)
-        subtasks = payload.split_into_subtasks(num_workers)
+        subtasks = payload.split_into_subtasks(worker_loads)
 
         # split_into_subtasks may return [self] when the task isn't splittable
         if len(subtasks) == 1 and subtasks[0] is payload:
@@ -327,8 +337,9 @@ class MasterServer:
         """
         Handle task_result or subtask_result from a worker.
 
-        - task_result    → routed to lb.task_completed / lb.task_failed  (normal path)
-        - subtask_result → routed to lb.subtask_completed / lb.subtask_failed (merge path)
+        There are 2 type of result:
+            - task_result which routed to lb.task_completed / lb.task_failed  (normal path)
+            - subtask_result which routed to lb.subtask_completed / lb.subtask_failed (merge path)
 
         The subtask_index comes from the packet header so the LB knows which slot to fill.
         """

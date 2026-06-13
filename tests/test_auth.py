@@ -10,18 +10,17 @@ from src.networking.network_io import net_send_hello, net_send_welcome, read_one
 from src.networking.packets import ControlPacket, PACKET_FLAGS
 
 load_dotenv()
-TOKEN = os.getenv("DCP_TOKEN")
+TOKEN = os.getenv("DCP_TOKEN") or "dcp-test-token-placeholder"
 print(f"TOKEN loaded: {TOKEN is not None}, value starts with: {str(TOKEN)[:5] if TOKEN else 'NONE'}")
-DEMO_WRONG_TOKEN = "hahhsjkfhefhbjewqFGDGSG67hbfgeswhbjgsbh"  
+DEMO_WRONG_TOKEN = "hahhsjkfhefhbjewqFGDGSG67hbfgeswhbjgsbh"
 
 PORT = 9876
 
 
-async def run_server(token_accept : str, result : list):
+async def run_server(token_accept: str, result: list):
     """
     Server does the handshake + token check.
-
-    Stores "Accept" or "Reject" in result[0].
+    Stores "accepted" or "rejected" in result[0].
     """
     rsa_key = generate_rsa_keypair()
     lock = asyncio.Lock()
@@ -35,90 +34,83 @@ async def run_server(token_accept : str, result : list):
             result[0] = f"crypto handshake failed: {e}"
             writer.close()
             return
-        
+
         try:
-            pkt = await read_one_packet(reader)  # can check that but doesnt really mater tbh
+            await read_one_packet(reader)  # consume ctrl_hello
             print("hello received")
         except Exception as e:
-            result[0] = f"hello faild: {e}"
+            result[0] = f"hello failed: {e}"
             writer.close()
-            return 
-        
+            return
+
         try:
             received = await receive_token(reader, crypto)
             print("token received")
         except Exception as e:
-            result[0] = f"token receive faild: {e}"
+            result[0] = f"token receive failed: {e}"
             writer.close()
             return
-        
-        # check token
+
         if received != token_accept:
             result[0] = "rejected"
             writer.close()
-            return 
-        
-        # all passed - accept and welcome
-        await net_send_welcome(writer, lock)
+            return
+
+        await net_send_welcome(writer, lock, 1)  # assign worker_id=1 for test
         result[0] = "accepted"
         writer.close()
-    
-    # run server forever
+
     server = await asyncio.start_server(handle_connection, "127.0.0.1", PORT)
     async with server:
         await server.serve_forever()
 
 
-async def run_worker(token_send : str) -> str:
+async def run_worker(token_send: str) -> str:
     """
     Worker does the handshake + token send.
-
-    Returns "Connected - good" if got ctrl_welcome back, "rejected" if he got rejected (connection closed).
+    Returns "connected" on ctrl_welcome, "rejected" if connection closed.
     """
     try:
         reader, writer = await asyncio.open_connection("127.0.0.1", PORT)
     except Exception as e:
         return f"couldnt connect: {e}"
-    
+
     lock = asyncio.Lock()
 
-    # handshake
     try:
         crypto = await SessionCrypto.worker_handshake(reader, writer, None)
     except Exception as e:
         writer.close()
         return f"handshake failed: {e}"
-    
-    # hello
-    await net_send_hello(writer, lock, 0)
-    
+
+    await net_send_hello(writer, lock)
     print("hello sent")
-    # send token
-    if token_send:
-        await send_token(writer, token_send, crypto)
-        print("token sent")
-    
-    # wait for the welcome
+
+    # always send — token_send is guaranteed non-None from test helpers
+    await send_token(writer, token_send, crypto)
+    print("token sent")
+
     try:
         pkt = await read_one_packet(reader)
     except Exception:
         writer.close()
-        return f"rejected"
-    
-    writer.close()  # at this point - it got smt, check what is it - no reason to keep alive, since if all went right this pacekt need to be the token
+        return "rejected"
+
+    writer.close()
 
     if pkt is None:
         return "rejected"
-    
+
     if isinstance(pkt, ControlPacket) and pkt.packet_type == PACKET_FLAGS.ctrl_welcome:
         return "connected"
-    
+
     return "went wrong"
 
-async def test_run(token_send: str, token_accept: str) -> tuple[str, str]:
+
+async def _test_run(token_send: str, token_accept: str) -> tuple[str, str]:
     master_result = ["waiting"]
     master_task = asyncio.create_task(run_server(token_accept, master_result))
-    await asyncio.sleep(0.2)  # give more time to start
+    await asyncio.sleep(0.2)
 
     try:
         worker_result = await asyncio.wait_for(run_worker(token_send), timeout=5)
@@ -127,25 +119,27 @@ async def test_run(token_send: str, token_accept: str) -> tuple[str, str]:
         print(f"TIMEOUT — master result so far: {master_result[0]}")
         return "timeout", master_result[0]
 
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.3)
     master_task.cancel()
     return worker_result, master_result[0]
 
+
 def test_correct_token():
-    worker_result, master_result = asyncio.run(test_run(TOKEN, TOKEN))
+    worker_result, master_result = asyncio.run(_test_run(TOKEN, TOKEN))
     assert worker_result == "connected", f"Worker output: {worker_result}"
-    assert master_result == "accepted", f"Master output: {master_result}"
-    print("correct token test- passed")
+    assert master_result == "accepted",  f"Master output: {master_result}"
+    print("correct token test - passed")
+
 
 def test_wrong_token():
-    worker_result, master_result = asyncio.run(test_run(DEMO_WRONG_TOKEN, TOKEN))
+    worker_result, master_result = asyncio.run(_test_run(DEMO_WRONG_TOKEN, TOKEN))
     assert worker_result == "rejected", f"Worker output: {worker_result}"
-    assert master_result == "rejected", f"Master output: {master_result}"
-    print("wrong token test- passed")
+    assert master_result == "rejected",  f"Master output: {master_result}"
+    print("wrong token test - passed")
 
 
 if __name__ == "__main__":
     print("Running auth tests...\n")
     test_correct_token()
     test_wrong_token()
-    print("\nALL GOOD- ALL TEST PASSED :)")
+    print("\nALL GOOD - ALL TESTS PASSED :)")

@@ -12,25 +12,26 @@ FONT_HEADER = ("Bahnschrift", 14, "bold")
 FONT_BODY   = ("Bahnschrift", 12)
 FONT_SMALL  = ("Bahnschrift", 10)
 
-COL_HEADER  = "#d0d0d0"
-COL_ROW_ODD = "#f9f9f9"
-COL_ROW_EVN = "#ffffff"
-BTN_REMOVE  = "#e05555"
-BTN_CONNECT = "#4a7cff"
+COL_HEADER  = "#130d0d"
+COL_ROW_ODD = "#221919"
+COL_ROW_EVN = "#130C0C"
+COL_TEXT      = "#c75353"
+BTN_REMOVE  = "#8b1a1a"
+BTN_CONNECT = "#8b2020"
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
 
 class LoginFrame(tk.Frame):
 
     def __init__(self, parent, on_connect):
-        super().__init__(parent)
+        super().__init__(parent, bg="black")
         self.on_connect_callback = on_connect
         self.bg_image = None
         self.logo_image = None
         self.build()
 
     def load_logo(self, width=140, height=140):
-        logo_path = os.path.join(ASSETS_DIR, "logo1.png")
+        logo_path = os.path.join(ASSETS_DIR, "logo_worker.png")
         if not os.path.exists(logo_path):
             print(f"Logo not found at {logo_path}")
             return None
@@ -45,33 +46,36 @@ class LoginFrame(tk.Frame):
             self.bg_image = ImageTk.PhotoImage(img)
             tk.Label(self, image=self.bg_image).place(x=0, y=0, relwidth=1, relheight=1)
 
-        tk.Label(self, text=APP_TITLE, font=("Bahnschrift", 26, "bold")).pack(pady=(30, 10))
+        tk.Label(self, text=APP_TITLE, font=("Bahnschrift", 26, "bold"),
+                 fg=COL_TEXT, bg="black").pack(pady=(30, 10))
 
         logo = self.load_logo()
         if logo:
-            tk.Label(self, image=logo, bd=0).pack(pady=10)
+            tk.Label(self, image=logo, bd=0, bg="black").pack(pady=10)
 
-        mode_frame = tk.Frame(self)
+        mode_frame = tk.Frame(self, bg="black")
         mode_frame.pack(pady=5)
-        tk.Label(mode_frame, text="Mode:", font=FONT_BODY).pack(side="left", padx=5)
-        tk.Label(mode_frame, text="Worker", font=FONT_BODY, relief="sunken", width=12).pack(side="left")
+        tk.Label(mode_frame, text="Mode:", font=FONT_BODY, fg=COL_TEXT, bg="black").pack(side="left", padx=5)
+        tk.Label(mode_frame, text="Worker", font=FONT_BODY, relief="sunken",
+                 bg=COL_ROW_ODD, fg=COL_TEXT, width=12).pack(side="left")
 
-        # empty default — user must type the real master IP
         vcmd_ip   = (self.register(lambda P: len(P) <= 15), "%P")
         vcmd_port = (self.register(lambda P: len(P) <= 5),  "%P")
 
         self.ip = tk.StringVar(value="")
-        ip_frame = tk.Frame(self)
+        ip_frame = tk.Frame(self, bg="black")
         ip_frame.pack(pady=5)
-        tk.Label(ip_frame, text="IP:", font=FONT_BODY, width=6).pack(side="left")
+        tk.Label(ip_frame, text="IP:", font=FONT_BODY, fg=COL_TEXT, bg="black", width=6).pack(side="left")
         tk.Entry(ip_frame, textvariable=self.ip, width=18, font=FONT_BODY,
+                 bg=COL_ROW_ODD, fg=COL_TEXT, insertbackground=COL_TEXT,
                  validate="key", validatecommand=vcmd_ip).pack(side="left")
 
         self.port = tk.StringVar(value="9000")
-        port_frame = tk.Frame(self)
+        port_frame = tk.Frame(self, bg="black")
         port_frame.pack(pady=5)
-        tk.Label(port_frame, text="PORT:", font=FONT_BODY, width=6).pack(side="left")
+        tk.Label(port_frame, text="PORT:", font=FONT_BODY, fg=COL_TEXT, bg="black", width=6).pack(side="left")
         tk.Entry(port_frame, textvariable=self.port, width=18, font=FONT_BODY,
+                 bg=COL_ROW_ODD, fg=COL_TEXT, insertbackground=COL_TEXT,
                  validate="key", validatecommand=vcmd_port).pack(side="left")
 
         tk.Button(self, text="Connect", font=FONT_HEADER, bg=BTN_CONNECT,
@@ -107,7 +111,7 @@ class ComputePanel(tk.Frame):
         self.build()
 
     def load_logo(self, width=200, height=140):
-        logo_path = os.path.join(ASSETS_DIR, "logo1.png")
+        logo_path = os.path.join(ASSETS_DIR, "logo_worker.png")
         if not os.path.exists(logo_path):
             return None
         img = Image.open(logo_path).resize((width, height))
@@ -116,27 +120,30 @@ class ComputePanel(tk.Frame):
 
     def build(self):
         # title bar
-        title_bar = tk.Frame(self)
+        title_bar = tk.Frame(self, bg=COL_ROW_ODD)
         title_bar.pack(fill="x", padx=10, pady=(10, 5))
         logo = self.load_logo()
         if logo:
-            tk.Label(title_bar, image=logo, bd=0).pack(side="left", padx=5)
-        tk.Label(title_bar, text="Compute Panel", font=FONT_TITLE).pack(side="left", padx=15)
-        self.worker_id_label = tk.Label(title_bar, text="", font=FONT_TITLE, fg="#3B4226")
+            tk.Label(title_bar, image=logo, bd=0, bg=COL_ROW_ODD).pack(side="left", padx=5)
+        tk.Label(title_bar, text="Compute Panel", font=FONT_TITLE,
+                 bg=COL_ROW_ODD, fg=COL_TEXT).pack(side="left", padx=15)
+        self.worker_id_label = tk.Label(title_bar, text="", font=FONT_TITLE,
+                                        bg=COL_ROW_ODD, fg="#cc4444")
         self.worker_id_label.pack(side="left", padx=5)
-        self.conn_label = tk.Label(title_bar, text="Connected", font=FONT_TITLE, fg="green")
+        self.conn_label = tk.Label(title_bar, text="Connected", font=FONT_TITLE,
+                                   bg=COL_ROW_ODD, fg="#cc4444")
         self.conn_label.pack(side="right", padx=10)
 
         # static column headers (not scrolled)
         header = tk.Frame(self, bg=COL_HEADER)
         header.pack(fill="x", padx=10)
         for text, width in self.COLUMNS:
-            tk.Label(header, text=text, font=FONT_HEADER, bg=COL_HEADER,
+            tk.Label(header, text=text, font=FONT_HEADER, bg=COL_HEADER, fg=COL_TEXT,
                      width=width // 8, anchor="w", relief="groove", bd=1
                      ).pack(side="left", ipadx=4, ipady=3)
 
         # scrollable canvas for rows — this is what prevents the crash
-        container = tk.Frame(self, relief="groove", bd=1)
+        container = tk.Frame(self, relief="groove", bd=1, bg=COL_HEADER)
         container.pack(fill="both", expand=True, padx=10, pady=5)
 
         self._canvas = tk.Canvas(container, bg=COL_ROW_ODD, highlightthickness=0)
@@ -145,7 +152,6 @@ class ComputePanel(tk.Frame):
         sb.pack(side="right", fill="y")
         self._canvas.pack(side="left", fill="both", expand=True)
 
-        # inner frame that holds the actual row widgets
         self._rows_frame = tk.Frame(self._canvas, bg=COL_ROW_ODD)
         self._canvas_win = self._canvas.create_window((0, 0), window=self._rows_frame, anchor="nw")
 
@@ -162,8 +168,8 @@ class ComputePanel(tk.Frame):
         row_frame = tk.Frame(self._rows_frame, bg=bg)
         row_frame.pack(fill="x")
 
-        mission_lbl = tk.Label(row_frame, text=mission_name, font=FONT_BODY, bg=bg, anchor="w", width=27)
-        status_lbl  = tk.Label(row_frame, text=status_text,  font=FONT_BODY, bg=bg, anchor="w", width=20)
+        mission_lbl = tk.Label(row_frame, text=mission_name, font=FONT_BODY, bg=bg, fg=COL_TEXT, anchor="w", width=27)
+        status_lbl  = tk.Label(row_frame, text=status_text,  font=FONT_BODY, bg=bg, fg=COL_TEXT, anchor="w", width=20)
         remove_btn  = tk.Button(row_frame, text="Remove", font=FONT_SMALL,
                                 bg=BTN_REMOVE, fg="white",
                                 command=lambda tid=task_id: self.on_remove_task_callback(tid))
@@ -221,8 +227,7 @@ class WorkerUI:
         self.cancel_callback = fn
 
     def on_remove_task(self, task_id: str):
-        confirmed = messagebox.askyesno("Remove task", f"Remove task {task_id[:8]}...?")
-        if confirmed and self.compute_panel:
+        if self.compute_panel:
             if self.cancel_callback:
                 self.cancel_callback(task_id)  # cancel the running future in the client
             self.compute_panel.remove_task(task_id)

@@ -22,7 +22,7 @@ task.status = "DONE"
 assert pkt.packet_type == PACKET_FLAGS.task_result
 
 t = RenderTask(width=64, height=64)
-for i, st in enumerate(t.split_into_subtasks(num_workers=2)):
+for i, st in enumerate(t.split_into_subtasks(worker_loads=[30.0, 67.0])):
     assert st.is_subtask and st.subtask_index == i
 
 for raw, flag in [
